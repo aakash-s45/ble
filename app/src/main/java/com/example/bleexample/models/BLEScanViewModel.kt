@@ -36,11 +36,23 @@ class BLEScanViewModel (private val bluetoothAdapter:BluetoothAdapter): ViewMode
         private set
     var textValue by mutableStateOf("")
         private set
+    var isDeviceConnected = mutableStateOf(false)
+        private set
+    var messages = mutableStateOf(mutableListOf<String>())
+        private set
 
     private val handler = Handler(Looper.getMainLooper())
 
     fun updateTextValue(newValue:String){
         textValue = newValue
+    }
+
+    fun addNewMessage(message:String){
+        messages.value.add(message)
+    }
+    fun setConnectionState(state:Boolean){
+        Log.d("BleSCANViewModel","connection state changed to $state")
+        isDeviceConnected.value = state
     }
 
 
@@ -121,6 +133,7 @@ class BLEScanViewModel (private val bluetoothAdapter:BluetoothAdapter): ViewMode
     fun selectDevice(device: BluetoothDevice){
         Log.d(TAG,"Selected Device: ${device.address}")
         selectedDevice = device
+        ChatServer.setCurrentChatConnection(device)
     }
 
 }

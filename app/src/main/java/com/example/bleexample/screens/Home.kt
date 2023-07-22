@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.bleexample.models.BLEScanViewModel
+import com.example.bleexample.models.ChatServer
 import com.example.bleexample.utils.askPermissions
 import com.example.bleexample.utils.askSinglePermission
 import com.example.bleexample.utils.requiredPermissionsInitialClient
@@ -104,34 +105,57 @@ fun Home(viewModel: BLEScanViewModel){
         verticalArrangement = Arrangement.Center
     ){
         Text("Current text to send: ${viewModel.textValue}")
-        Button(onClick = {
-            Log.d(TAG, "Start Scan button clicked")
+        Button(onClick={
             askPermissions(multiplePermissionLauncher, requiredPermissionsInitialClient,context){
-                viewModel.startScan()
+                Log.d(TAG, "Permission granted")
             }
         }){
-            Text(text = "Start Scan")
+            Text(text = "Ask for permissions")
         }
-        if(isScanning.value){
-            Text(text = "Scanning...")
-        }
-        if(scanResults.isNotEmpty()){
-            Text(text = "Scan Results:")
-            scanResults.forEach {
-
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.clickable {
-                        viewModel.selectDevice(it.value)
-                    }.background(color = Color.LightGray)
-                        .padding(15.dp)
-                ){
-                    Text(text = "${it.key} - ${it.value.name?: "Unnamed"}", modifier = Modifier.background(color = if (selectedDevice == it.value) Color.Green else Color.Black))
+        Text(viewModel.isDeviceConnected.toString())
+        if(viewModel.isDeviceConnected.value.not()){
+            Button(onClick = {
+                Log.d(TAG, "Start Scan button clicked")
+                askPermissions(multiplePermissionLauncher, requiredPermissionsInitialClient,context){
+                    viewModel.startScan()
+                }
+            }){
+                Text(text = "Start Scan")
+            }
+            if(isScanning.value){
+                Text(text = "Scanning...")
+            }
+            if(scanResults.isNotEmpty()){
+                Text(text = "Scan Results:")
+                scanResults.forEach {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.clickable {
+                            viewModel.selectDevice(it.value)
+                        }.background(color = Color.LightGray)
+                            .padding(15.dp)
+                    ){
+                        Text(text = "${it.key} - ${it.value.name?: "Unnamed"}", modifier = Modifier.background(color = if (selectedDevice == it.value) Color.Green else Color.Black))
+                    }
                 }
             }
         }
-        TextField(value = viewModel.textValue, onValueChange = {newValue->
-            viewModel.updateTextValue(newValue)
-        })
+        else{
+            Text(text = "Connected")
+
+            viewModel.messages.value.forEach { message ->
+                Text(text = message)
+            }
+            TextField(value = viewModel.textValue, onValueChange = {newValue->
+                viewModel.updateTextValue(newValue)
+            })
+            Button(onClick = {
+                ChatServer.sendMessage(viewModel.textValue)
+                viewModel.updateTextValue("")
+            }){
+                Text(text = "Send")
+            }
+        }
+
     }
 }
