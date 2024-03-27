@@ -20,7 +20,11 @@ import android.os.ParcelUuid
 import android.util.Log
 import com.example.bleexample.utils.myCharacteristicsUUID1
 import com.example.bleexample.utils.myCharacteristicsUUID2
+import com.example.bleexample.utils.myCharacteristicsUUID3
 import com.example.bleexample.utils.myServiceUUID1
+import java.util.Timer
+import java.util.TimerTask
+
 
 object ChatServer{
     private var app: Application? = null
@@ -120,6 +124,11 @@ object ChatServer{
             addService(setupGattService())
         }
     }
+    var tempCharacteristic = BluetoothGattCharacteristic(
+        myCharacteristicsUUID3,
+        BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+        BluetoothGattCharacteristic.PERMISSION_READ
+    )
     private fun setupGattService(): BluetoothGattService {
         // Setup gatt service
         val service = BluetoothGattService(myServiceUUID1, BluetoothGattService.SERVICE_TYPE_PRIMARY)
@@ -136,6 +145,9 @@ object ChatServer{
             BluetoothGattCharacteristic.PERMISSION_WRITE
         )
         service.addCharacteristic(confirmCharacteristic)
+//        temporary test characteristic
+
+        service.addCharacteristic(tempCharacteristic)
         return service
     }
     private fun buildAdvertiseData(): AdvertiseData {
@@ -165,6 +177,7 @@ object ChatServer{
                 Log.d("GattServer", "Server connected to ${device.address}")
                 viewModel.setConnectionState(true)
                 connectToChatDevice(device)
+                startUpatingChar(device)
 
             } else {
                 Log.d("GattServer", "Server disconnected from ${device.name}")
@@ -238,5 +251,28 @@ object ChatServer{
                 }
             }
         }
+    }
+
+
+    private var updateTimer: Timer? = null
+    private fun startUpatingChar(device:BluetoothDevice){
+        var temp1 = 1
+        Log.i(TAG, "Start updateing char")
+        if (updateTimer == null) {
+            updateTimer = Timer()
+            updateTimer!!.scheduleAtFixedRate(object : TimerTask() {
+                override fun run() {
+                    temp1+=1
+                    writeCharValue(temp1.toString(), device)
+                }
+            }, 0, 1000) // Update every 1000ms (1 second)
+        }
+    }
+    @SuppressLint("MissingPermission")
+    private fun writeCharValue(value:String, device: BluetoothDevice){
+        print("New value set $value")
+        Log.i(TAG, "Start updateing char $value")
+        tempCharacteristic.value = value.toByteArray()
+        gattServer?.notifyCharacteristicChanged(device, tempCharacteristic, true)
     }
 }
