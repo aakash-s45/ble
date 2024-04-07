@@ -207,6 +207,10 @@ object ChatServer{
                 }
             }
         }
+        override fun onNotificationSent(device: BluetoothDevice?, status: Int) {
+            super.onNotificationSent(device, status)
+            Log.d(TG, "Notification sent to ${device?.address}, status: $status")
+        }
     }
     private class DeviceAdvertiseCallback : AdvertiseCallback() {
         override fun onStartFailure(errorCode: Int) {

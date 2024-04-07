@@ -1,0 +1,176 @@
+package com.example.bleexample.ble
+
+import android.annotation.SuppressLint
+import android.app.Application
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattServer
+import android.bluetooth.BluetoothGattServerCallback
+import android.bluetooth.BluetoothGattService
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothServerSocket
+import android.util.Log
+import com.example.bleexample.models.ChatServer
+import com.example.bleexample.models.TAG
+import com.example.bleexample.models.TG
+import com.example.bleexample.utils.myCharacteristicsUUID1
+import com.example.bleexample.utils.myCharacteristicsUUID2
+import com.example.bleexample.utils.myServiceUUID2
+import java.util.Timer
+import java.util.TimerTask
+
+class BleServer(private val app: Application, private val bluetoothManager: BluetoothManager){
+    private var bluetoothAdapter: BluetoothAdapter = bluetoothManager.adapter
+    private var serversocket: BluetoothServerSocket? = null
+
+    private var gattServer: BluetoothGattServer? = null
+    private var gattServerCallback: BluetoothGattServerCallback? = null
+    private var bleAdvertiser: BleAdvertiser? = null
+    private var bleDevice: BluetoothDevice? = null
+    var theval:Int = 0
+
+    @SuppressLint("MissingPermission")
+    fun start(){
+        gattServerCallback = GattServerCallback()
+        gattServer = bluetoothManager.openGattServer(app, gattServerCallback
+        ).apply {
+            addService(setupGattService())
+        }
+        bleAdvertiser = BleAdvertiser(bluetoothAdapter).apply {
+            start()
+        }
+
+    }
+
+    @SuppressLint("MissingPermission")
+    fun stop(){
+        bleAdvertiser?.stop()
+        serversocket?.close()
+        gattServer?.apply {
+            clearServices()
+            close()
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun sendMessage(message: String){
+        if (bleDevice != null){
+            psmCharacteristic.value = message.toByteArray()
+            gattServer?.notifyCharacteristicChanged(bleDevice, psmCharacteristic,true)
+        }
+        else{
+            Log.i(TG, "No connected bluetooth device found")
+        }
+    }
+
+    var psmCharacteristic = BluetoothGattCharacteristic(
+        myCharacteristicsUUID2,
+        BluetoothGattCharacteristic.PROPERTY_INDICATE or BluetoothGattCharacteristic.PROPERTY_READ,
+        BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED
+    )
+    private fun setupGattService(): BluetoothGattService {
+        val service = BluetoothGattService(myServiceUUID2, BluetoothGattService.SERVICE_TYPE_PRIMARY)
+        val messageCharacteristic = BluetoothGattCharacteristic(
+            myCharacteristicsUUID1,
+            BluetoothGattCharacteristic.PROPERTY_WRITE,
+            BluetoothGattCharacteristic.PERMISSION_WRITE
+        )
+
+        service.addCharacteristic(messageCharacteristic)
+        service.addCharacteristic(psmCharacteristic)
+        return service
+    }
+
+    private inner class GattServerCallback : BluetoothGattServerCallback() {
+        @SuppressLint("MissingPermission")
+        override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
+            super.onConnectionStateChange(device, status, newState)
+            val isSuccess = status == BluetoothGatt.GATT_SUCCESS
+            val isConnected = newState == BluetoothProfile.STATE_CONNECTED
+            Log.d(
+                TAG,
+                "onConnectionStateChange: Server $device ${device.name} success: $isSuccess connected: $isConnected"
+            )
+            if (isSuccess && isConnected) {
+                Log.d(TG, "Server connected to ${device.address}")
+                try {
+                    bleDevice = device
+                    serversocket = bluetoothAdapter.listenUsingL2capChannel()
+                    theval = serversocket!!.psm
+                }
+                catch (e:Error){
+                    bleDevice= null
+                    Log.e(TG, e.toString())
+                    serversocket?.close()
+                }
+            } else {
+                bleDevice = null
+                Log.d(TG, "Server disconnected from ${device.name}")
+                serversocket?.close()
+            }
+        }
+
+        @SuppressLint("MissingPermission")
+        override fun onCharacteristicWriteRequest(
+            device: BluetoothDevice,
+            requestId: Int,
+            characteristic: BluetoothGattCharacteristic,
+            preparedWrite: Boolean,
+            responseNeeded: Boolean,
+            offset: Int,
+            value: ByteArray?
+        ) {
+            super.onCharacteristicWriteRequest(device, requestId, characteristic, preparedWrite, responseNeeded, offset, value)
+            if (characteristic.uuid == myCharacteristicsUUID1) {
+
+                gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                val message = value?.toString(Charsets.UTF_8)
+                Log.d(TAG, "onCharacteristicWriteRequest: Have message: \"$message\"")
+                message?.let {
+                    Log.i(TG, "Message received: $it")
+                }
+            }
+        }
+
+        @SuppressLint("MissingPermission")
+        override fun onCharacteristicReadRequest(
+            device: BluetoothDevice?,
+            requestId: Int,
+            offset: Int,
+            characteristic: BluetoothGattCharacteristic?
+        ) {
+            super.onCharacteristicReadRequest(device, requestId, offset, characteristic)
+            if (device != null) {
+                Log.i(TG, "Read request received from device: ${device.address}, ${device.name}")
+            }
+            gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, "$theval".toByteArray())
+        }
+
+        override fun onNotificationSent(device: BluetoothDevice?, status: Int) {
+            super.onNotificationSent(device, status)
+            Log.d(TG, "Notification sent to ${device?.address}, status: $status")
+        }
+
+        private var updateTimer: Timer? = null
+        private fun startUpatingChar(message:String, device:BluetoothDevice){
+            val socket = serversocket?.accept()
+            socket?.outputStream?.write("Hello l2cap channel".toByteArray())
+            var temp1 = 1
+            Log.i(TAG, "Start updating char")
+            if (updateTimer == null) {
+                updateTimer = Timer()
+                updateTimer!!.scheduleAtFixedRate(object : TimerTask() {
+                    @SuppressLint("MissingPermission")
+                    override fun run() {
+                        gattServer?.notifyCharacteristicChanged(device,
+                            psmCharacteristic, true)
+                    }
+                }, 0, 1000) // Update every 1000ms (1 second)
+            }
+        }
+
+    }
+}

@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
+import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -26,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.example.bleexample.models.BLEScanViewModel
 import com.example.bleexample.models.ChatServer
+import com.example.bleexample.models.L2CAPServer
+import com.example.bleexample.models.NewServer
 import com.example.bleexample.screens.Home
 import com.example.bleexample.ui.theme.BLEExampleTheme
 import com.example.bleexample.utils.askPermissions
@@ -57,11 +60,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        ChatServer.startServer(application,viewModel)
+//        ChatServer.startServer(application,viewModel)
+        NewServer.start(application)
+//        L2CAPServer.startServer(application, viewModel)
     }
     override fun onStop() {
         super.onStop()
-        ChatServer.stopServer()
+//        ChatServer.stopServer()
+        NewServer.stop()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,7 +105,12 @@ class MainActivity : ComponentActivity() {
                             )
                     {
                         Greeting("Android")
-                        Home(viewModel = viewModel)
+                        Button(onClick = {
+                            NewServer.sendMessage("button")
+                        }) {
+                            Text(text = "The button")
+                        }
+//                        Home(viewModel = viewModel)
                     }
                 }
             }
