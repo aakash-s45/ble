@@ -67,8 +67,9 @@ class MediaViewModel:ViewModel(){
 
 
     fun startElapsedTimer(){
+        timerJob?.cancel()
         if (!mediaState.value.playbackRate) {
-            timerJob?.cancel()
+            return
         } else {
             timerJob = viewModelScope.launch {
                 while (mediaState.value.elapsed < mediaState.value.duration){
