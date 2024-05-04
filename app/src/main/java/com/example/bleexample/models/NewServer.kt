@@ -30,6 +30,11 @@ object NewServer{
         }
     }
 
+    fun setViewModel(mediaViewModel: MediaViewModel? = null){
+        bleServer?.setViewModel(mediaViewModel)
+        PacketManager.setViewModel(mediaViewModel)
+    }
+
     fun stop(){
         bleServer?.stop()
     }
@@ -38,6 +43,11 @@ object NewServer{
         count+=1
         var newmessage = "$message c:$count"
         bleServer?.sendMessage(newmessage)
+    }
+
+    fun notifyWithResponse(message: String){
+        val _message = "N$message"
+        bleServer?.notifyResponse(_message)
     }
 
 }

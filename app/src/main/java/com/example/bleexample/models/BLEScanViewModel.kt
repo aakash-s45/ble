@@ -133,7 +133,6 @@ class BLEScanViewModel (private val bluetoothAdapter:BluetoothAdapter): ViewMode
     fun selectDevice(device: BluetoothDevice){
         Log.d(TAG,"Selected Device: ${device.address}")
         selectedDevice = device
-        L2CAPServer.getScannedDevice(device)
     }
 
 }

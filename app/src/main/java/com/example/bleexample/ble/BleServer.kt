@@ -13,14 +13,15 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothServerSocket
 import android.util.Log
-import com.example.bleexample.models.ChatServer
+import com.example.bleexample.models.MediaState
+import com.example.bleexample.models.MediaViewModel
+import com.example.bleexample.models.PacketManager
 import com.example.bleexample.models.TAG
 import com.example.bleexample.models.TG
+import com.example.bleexample.models.toData
 import com.example.bleexample.utils.myCharacteristicsUUID1
 import com.example.bleexample.utils.myCharacteristicsUUID2
 import com.example.bleexample.utils.myServiceUUID2
-import java.util.Timer
-import java.util.TimerTask
 
 class BleServer(private val app: Application, private val bluetoothManager: BluetoothManager){
     private var bluetoothAdapter: BluetoothAdapter = bluetoothManager.adapter
@@ -30,7 +31,11 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
     private var gattServerCallback: BluetoothGattServerCallback? = null
     private var bleAdvertiser: BleAdvertiser? = null
     private var bleDevice: BluetoothDevice? = null
-    var theval:Int = 0
+
+    private var mediaData: MediaState? = null
+    private var viewModel: MediaViewModel? = null
+    private var deviceName: String = ""
+
 
     @SuppressLint("MissingPermission")
     fun start(){
@@ -42,7 +47,7 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
         bleAdvertiser = BleAdvertiser(bluetoothAdapter).apply {
             start()
         }
-
+        mediaData = MediaState()
     }
 
     @SuppressLint("MissingPermission")
@@ -52,6 +57,16 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
         gattServer?.apply {
             clearServices()
             close()
+        }
+    }
+
+    fun setViewModel(mediaViewModel: MediaViewModel? = null){
+        if (mediaViewModel != null) {
+            Log.i("123BLEServer", "Setting view-model")
+            this.viewModel = mediaViewModel
+        }
+        else{
+            Log.i("123BLEServer", "No view-model")
         }
     }
 
@@ -65,6 +80,18 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
             Log.i(TG, "No connected bluetooth device found")
         }
     }
+
+    @SuppressLint("MissingPermission")
+    fun notifyResponse(message: String){
+        if (bleDevice != null){
+            psmCharacteristic.value = message.toByteArray()
+            gattServer?.notifyCharacteristicChanged(bleDevice, psmCharacteristic,true)
+        }
+        else{
+            Log.i(TG, "No connected bluetooth device found")
+        }
+    }
+
 
     var psmCharacteristic = BluetoothGattCharacteristic(
         myCharacteristicsUUID2,
@@ -95,21 +122,19 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
                 "onConnectionStateChange: Server $device ${device.name} success: $isSuccess connected: $isConnected"
             )
             if (isSuccess && isConnected) {
+                deviceName = device.name
+                viewModel?.updateData("",deviceName)
                 Log.d(TG, "Server connected to ${device.address}")
                 try {
                     bleDevice = device
-                    serversocket = bluetoothAdapter.listenUsingL2capChannel()
-                    theval = serversocket!!.psm
                 }
                 catch (e:Error){
                     bleDevice= null
                     Log.e(TG, e.toString())
-                    serversocket?.close()
                 }
             } else {
                 bleDevice = null
                 Log.d(TG, "Server disconnected from ${device.name}")
-                serversocket?.close()
             }
         }
 
@@ -126,11 +151,17 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
             super.onCharacteristicWriteRequest(device, requestId, characteristic, preparedWrite, responseNeeded, offset, value)
             if (characteristic.uuid == myCharacteristicsUUID1) {
 
-                gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset,null)
+                if(value != null){
+                    PacketManager.parse(value, deviceName)
+
+                }
                 val message = value?.toString(Charsets.UTF_8)
                 Log.d(TAG, "onCharacteristicWriteRequest: Have message: \"$message\"")
                 message?.let {
                     Log.i(TG, "Message received: $it")
+//                    delegator(devicename) -> viewmodel
+//                    viewModel?.updateData(it, deviceName)
                 }
             }
         }
@@ -146,31 +177,19 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
             if (device != null) {
                 Log.i(TG, "Read request received from device: ${device.address}, ${device.name}")
             }
-            gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, "$theval".toByteArray())
+            val sendPacket = PacketManager.remotePacket
+            if (sendPacket != null) {
+                val status = gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, sendPacket.toData())
+                if(status == true){
+                    PacketManager.remotePacket = null
+                }
+                Log.i(TG, "Response status to device: $status")
+            }
         }
 
         override fun onNotificationSent(device: BluetoothDevice?, status: Int) {
             super.onNotificationSent(device, status)
             Log.d(TG, "Notification sent to ${device?.address}, status: $status")
         }
-
-        private var updateTimer: Timer? = null
-        private fun startUpatingChar(message:String, device:BluetoothDevice){
-            val socket = serversocket?.accept()
-            socket?.outputStream?.write("Hello l2cap channel".toByteArray())
-            var temp1 = 1
-            Log.i(TAG, "Start updating char")
-            if (updateTimer == null) {
-                updateTimer = Timer()
-                updateTimer!!.scheduleAtFixedRate(object : TimerTask() {
-                    @SuppressLint("MissingPermission")
-                    override fun run() {
-                        gattServer?.notifyCharacteristicChanged(device,
-                            psmCharacteristic, true)
-                    }
-                }, 0, 1000) // Update every 1000ms (1 second)
-            }
-        }
-
     }
 }

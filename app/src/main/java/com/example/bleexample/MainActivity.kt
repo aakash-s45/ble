@@ -8,28 +8,22 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
-import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.example.bleexample.models.BLEScanViewModel
-import com.example.bleexample.models.ChatServer
-import com.example.bleexample.models.L2CAPServer
+import com.example.bleexample.models.MediaViewModel
 import com.example.bleexample.models.NewServer
-import com.example.bleexample.screens.Home
+import com.example.bleexample.screens.MediaPage
 import com.example.bleexample.ui.theme.BLEExampleTheme
 import com.example.bleexample.utils.askPermissions
 import com.example.bleexample.utils.enableLocation
@@ -39,10 +33,11 @@ import com.example.bleexample.utils.requiredPermissionsInitialClient
 const val TAG = "MainActivity"
 
 class MainActivity : ComponentActivity() {
-    lateinit var viewModel:BLEScanViewModel
+    private lateinit var viewModel:BLEScanViewModel
     lateinit var bluetoothAdapter:BluetoothAdapter
+    private val mediaViewModel by viewModels<MediaViewModel>()
 
-    val multiplePermissionLauncher =
+    private val multiplePermissionLauncher =
             registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
                 Log.i(com.example.bleexample.screens.TAG, "Launcher result: $permissions")
                 if (permissions.containsValue(false)) {
@@ -60,13 +55,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-//        ChatServer.startServer(application,viewModel)
         NewServer.start(application)
-//        L2CAPServer.startServer(application, viewModel)
+        NewServer.setViewModel(mediaViewModel)
     }
     override fun onStop() {
         super.onStop()
-//        ChatServer.stopServer()
         NewServer.stop()
     }
 
@@ -88,7 +81,7 @@ class MainActivity : ComponentActivity() {
         }
         viewModel = BLEScanViewModel(bluetoothAdapter)
         // Register for broadcasts when a device is discovered
-        var filter = IntentFilter()
+        val filter = IntentFilter()
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
         registerReceiver(mReceiver, filter)
 
@@ -99,19 +92,22 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    Column (
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                            )
-                    {
-                        Greeting("Android")
-                        Button(onClick = {
-                            NewServer.sendMessage("button")
-                        }) {
-                            Text(text = "The button")
-                        }
-//                        Home(viewModel = viewModel)
-                    }
+                    MediaPage()
+//                    Column (
+//                        verticalArrangement = Arrangement.Center,
+//                        horizontalAlignment = Alignment.CenterHorizontally,
+//                            )
+//                    {
+//                        Greeting("Android")
+//                        Button(onClick = {
+//                    TODO: use this function later to send message
+//                            NewServer.sendMessage("button")
+//                        }) {
+//                            Text(text = "The button")
+//                        }
+//
+////                        Home(viewModel = viewModel)
+//                    }
                 }
             }
         }
