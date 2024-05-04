@@ -156,13 +156,6 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
                     PacketManager.parse(value, deviceName)
 
                 }
-                val message = value?.toString(Charsets.UTF_8)
-                Log.d(TAG, "onCharacteristicWriteRequest: Have message: \"$message\"")
-                message?.let {
-                    Log.i(TG, "Message received: $it")
-//                    delegator(devicename) -> viewmodel
-//                    viewModel?.updateData(it, deviceName)
-                }
             }
         }
 

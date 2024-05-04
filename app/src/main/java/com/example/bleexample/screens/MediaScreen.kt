@@ -1,8 +1,7 @@
 package com.example.bleexample.screens
 
+import android.app.Activity
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.util.Base64
 import android.util.Log
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
@@ -26,10 +25,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,9 +42,12 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -56,7 +58,6 @@ import com.example.bleexample.models.CurrentMedia
 import com.example.bleexample.models.MediaViewModel
 import com.example.bleexample.models.PacketManager
 import com.example.bleexample.models.RC
-import com.example.bleexample.utils.imageString
 
 private val hexArray = "0123456789ABCDEF".toCharArray()
 fun bytesToHex(bytes: ByteArray): String {
@@ -76,16 +77,6 @@ fun MediaPage() {
     val viewModel: MediaViewModel = viewModel()
     val currentMedia by viewModel.mediaState.collectAsState()
     Log.i("MediaPage", "Updated media page")
-//    val byteArray1 = imageString.substring(0,16)
-//    val decodedBytes = Base64.decode(byteArray1, Base64.DEFAULT)
-//    val decodedBytes = Base64.decode(byteArray1, Base64.DEFAULT)
-//    Log.i("Base64Substring", decodedBytes.contentToString())
-//    Log.i("Base64Substring", bytesToHex(decodedBytes))
-//    val byteArray = Base64.decode(imageString, Base64.DEFAULT)
-//    val bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
-//    Log.i("TempArt", bitmap.height.toString())
-//    viewModel.updateArtwork(bitmap)
-//    Image(bitmap = bitmap.asImageBitmap(), contentDescription ="temp")
     MediaPlayer(currentMedia = currentMedia, viewModel)
 
 }
@@ -97,23 +88,30 @@ fun MediaPlayer(currentMedia: CurrentMedia, viewModel: MediaViewModel){
     Log.i("Playbackrate", currentMedia.toString())
     var isPlaying by remember { mutableStateOf(currentMedia.playbackRate) }
 
+
+    val defaultBackdropColor = Color(55, 69, 94, 255)
+    var bgColor = currentMedia.palette?.darkMutedSwatch?.rgb
+    if (bgColor == null) {
+        bgColor = defaultBackdropColor.toArgb()
+    }
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            window.statusBarColor = bgColor
+            window.navigationBarColor = Color.White.toArgb()
+        }
+    }
     Box (modifier = Modifier
         .fillMaxSize()
-        .background(color = Color(55, 69, 94, 255))){
+        .background(color = Color(bgColor))){
     }
 
     Column(modifier = Modifier
         .fillMaxSize()
         .padding(scrrenPadding, 0.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Button(onClick = {
-            val decodedBytes = Base64.decode(imageString, Base64.DEFAULT)
-            val bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
-            viewModel.updateArtwork(bitmap)
-        }) {
-            Text(text = "Update image")
-        }
         Spacer(modifier = Modifier.height(90.dp))
-        AlbumArt(isPlaying = currentMedia.playbackRate)
+        AlbumArt(data = currentMedia.artwork, isPlaying = currentMedia.playbackRate)
         Spacer(modifier = Modifier.height(40.dp))
         MusicTitle(currentMedia.title, currentMedia.artist)
         Spacer(modifier = Modifier.height(10.dp))
@@ -122,30 +120,34 @@ fun MediaPlayer(currentMedia: CurrentMedia, viewModel: MediaViewModel){
         PlayerButtons(currentMedia) {
             viewModel.togglePlayPause()
         }
-//        PlayerButtons(isPlaying = currentMedia.playbackRate) {
-//            isPlaying = !isPlaying
-//        }
         Spacer(modifier = Modifier.height(18.dp))
-        VolumeController(30.0)
+        VolumeController(30.0, color = Color(194, 192, 192, 255))
     }
 }
 
 @Composable
 fun AlbumArt(data:Bitmap? = null, isPlaying: Boolean = false){
-    val scale by animateFloatAsState(targetValue = if (isPlaying) 1f else 0.85f, label="album art size")
     Log.i("AlbumArtImage", data.toString())
-    if (data != null) {
-        Image(bitmap = data.asImageBitmap(), contentDescription = "album art")
-    }
-    else{
-        Box(
-            modifier = Modifier
-                .aspectRatio(1f)
-                .scale(scale)
-                .shadow(12.dp, RoundedCornerShape(16.dp))
-                .clip(RoundedCornerShape(16.dp))
-        ){
+    ImagePlaceholder(data, isPlaying = isPlaying)
+}
+
+
+@Composable
+fun ImagePlaceholder(data: Bitmap? = null, isPlaying: Boolean = false){
+    val scale by animateFloatAsState(targetValue = if (isPlaying) 1f else 0.85f, label="album art size")
+
+    Box(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .scale(scale)
+            .shadow(12.dp, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
+    ){
+        if(data == null){
             Image(painter = painterResource(id = R.drawable.placeholder_albumart), contentDescription = "placeholder album art")
+        }
+        else{
+            Image(bitmap = data.asImageBitmap(), contentDescription = "album art", modifier = Modifier.fillMaxSize())
         }
     }
 }
@@ -159,7 +161,7 @@ fun MusicTitle(title:String, artist:String){
             .height(boxHeight), contentAlignment = Alignment.CenterStart
         ) {
             Column {
-                Text(text = title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White, letterSpacing = 0.05.sp)
+                Text(text = title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White, letterSpacing = 0.05.sp, overflow = TextOverflow.Ellipsis)
                 Text(text = artist, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = Color.LightGray)
             }
         }
@@ -297,7 +299,7 @@ fun PlayerButtons(currentMedia: CurrentMedia, toggle: ()->Unit){
 
 
 @Composable
-fun VolumeController(volume:Double){
+fun VolumeController(volume:Double, color:Color = Color.White){
     var currentVolume by remember {
         mutableStateOf(50.0)
     }
@@ -316,11 +318,11 @@ fun VolumeController(volume:Double){
                     currentVolume = 0.0
                     PacketManager.sendRemotePacket(RC.VOL_MIN)
                 },
-            tint = Color.White
+            tint = color
         )
         Spacer(modifier = Modifier.width(5.dp))
 //        SeekBar(fraction = volume, modifier = Modifier.weight(8f))
-        CustomSeekBar(targetValue = 100.0, currentValue = currentVolume, modifier = Modifier
+        CustomSeekBar(targetValue = 100.0, currentValue = currentVolume, primaryColor = color, modifier = Modifier
             .height(6.dp)
             .weight(8f)
             ,onPositionChange = { newPosition ->
@@ -341,7 +343,7 @@ fun VolumeController(volume:Double){
                     PacketManager.sendRemotePacket(RC.VOL_PLUS)
                 }
             ,
-            tint = Color.White
+            tint = color
         )
 
     }
@@ -352,6 +354,8 @@ fun VolumeController(volume:Double){
 fun CustomSeekBar(
     targetValue: Double,
     currentValue: Double,
+    backgroundColor: Color = Color(230, 230, 230, 96),
+    primaryColor:Color = Color.White,
     modifier: Modifier = Modifier,
     onPositionChange: (Double) -> Unit,
     onInteractionEnd: (Double) -> Unit = {}
@@ -361,7 +365,7 @@ fun CustomSeekBar(
     var isDragging by remember { mutableStateOf(false) }
     val barShape = RoundedCornerShape(10.dp)
     val barHeight = 6.dp
-    val backgroundColor = Color(230, 230, 230, 96)
+//    val backgroundColor = Color(230, 230, 230, 96)
     var newValueHolder = currentValue
     Box(
         modifier = modifier
@@ -402,7 +406,7 @@ fun CustomSeekBar(
             modifier = modifier
                 .height(barHeight)
                 .clip(barShape)
-                .background(color = Color.White)
+                .background(color = primaryColor)
                 .fillMaxWidth((progress.toFloat()))
         )
     }

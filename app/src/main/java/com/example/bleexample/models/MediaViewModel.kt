@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.palette.graphics.Palette
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,10 +16,21 @@ import kotlinx.coroutines.launch
 
 //Message received: M_Meet Me Halfway_The Black Eyed Peas__289.341_156.74562258299144_false_Safari
 class MediaViewModel:ViewModel(){
-    private val _mediaState = MutableStateFlow(CurrentMedia("","","",100.0,false,"",0.0,"", null))
+    private val _mediaState = MutableStateFlow(CurrentMedia("","","",100.0,false,"",0.0,"", null, palette = null))
     private var timerJob:Job? = null
 
     var mediaState: StateFlow<CurrentMedia> = _mediaState.asStateFlow()
+
+
+    fun updatePalette(bitmap: Bitmap){
+        Log.i("MediaViewModel", "Updating palette")
+        Palette.from(bitmap).generate { palette ->
+            _mediaState.update {
+                it.copy(palette = palette)
+
+            }
+        }
+    }
 
     fun updateData(dataString: String, deviceName: String = ""){
         _mediaState.update {
@@ -33,6 +45,7 @@ class MediaViewModel:ViewModel(){
             return
         }
         Log.i("MediaViewModel", "Updating artwork")
+        updatePalette(artwork)
         _mediaState.update {
             updateAlbumArt(artwork, it)
         }
@@ -84,6 +97,7 @@ data class CurrentMedia(
     val elapsed: Double,
     val deviceName: String,
     val artwork: Bitmap?,
+    val palette: Palette?,
 )
 
 fun setMediaData(dataString: String, currentMediaState: CurrentMedia, deviceName: String = ""):CurrentMedia {
@@ -115,8 +129,11 @@ fun setMediaData(dataString: String, currentMediaState: CurrentMedia, deviceName
 }
 
 fun updateAlbumArt(artwork: Bitmap, currentMediaState: CurrentMedia):CurrentMedia {
-    return currentMediaState.copy(artwork=artwork)
+    val palette = Palette.from(artwork).generate()
+    Log.i("Palette", "what palette: ${palette}")
+    return currentMediaState.copy(artwork=artwork, palette = palette)
 }
+
 
 
 class MediaState {
