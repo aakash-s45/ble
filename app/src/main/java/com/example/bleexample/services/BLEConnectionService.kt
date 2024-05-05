@@ -1,5 +1,6 @@
 package com.example.bleexample.services
 
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationManager
 import android.app.Service
@@ -10,18 +11,18 @@ import android.graphics.Matrix
 import android.os.IBinder
 import android.support.v4.media.session.MediaSessionCompat
 import android.util.Log
-import androidx.annotation.OptIn
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.example.bleexample.R
 import com.example.bleexample.models.MediaDataStore
-import com.example.bleexample.models.MediaViewModel
 import com.example.bleexample.models.NewServer
 
 
 class BLEConnectionService:Service() {
     private var notificationManager: NotificationManager? = null
-    private lateinit var viewModel: MediaViewModel
+    private var isServiceRunning = false
     override fun onBind(intent: Intent?): IBinder? {
         return null
     }
@@ -46,7 +47,9 @@ class BLEConnectionService:Service() {
     override fun onDestroy() {
         NewServer.stop()
         super.onDestroy()
+        isServiceRunning = false
     }
+
 
     fun onStart() {
         val notificationCompatManager : NotificationManagerCompat = NotificationManagerCompat.from(applicationContext)
@@ -86,8 +89,8 @@ class BLEConnectionService:Service() {
         else{
             notificationCompatManager?.notify(1, notification)
         }
+        isServiceRunning = true
         NewServer.start(application)
-        MediaDataStore.setAppContext(application)
     }
 
 
@@ -97,5 +100,4 @@ class BLEConnectionService:Service() {
         STOP,
         UPDATE
     }
-
 }
