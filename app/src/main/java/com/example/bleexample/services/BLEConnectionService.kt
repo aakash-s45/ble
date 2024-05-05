@@ -48,7 +48,7 @@ class BLEConnectionService:Service() {
         isServiceRunning = false
     }
 
-    fun updatePlaybackState(isPlaying: Boolean, totalDuration: Long, elapsedTime: Long) {
+    fun updatePlaybackState(isPlaying: Boolean, totalDuration: Long, elapsedTime: Long, title:String) {
         Log.i("updatePlaybackState", "$isPlaying, $totalDuration, $elapsedTime")
         val playbackStateBuilder = PlaybackStateCompat.Builder()
             .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_SEEK_TO)
@@ -61,7 +61,7 @@ class BLEConnectionService:Service() {
          mediaSessionCompat?.setPlaybackState(playbackStateBuilder.build())
 
         val metadataBuilder = MediaMetadataCompat.Builder()
-            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "Media Title")
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, totalDuration)
         mediaSessionCompat?.setMetadata(metadataBuilder.build())
     }
@@ -94,7 +94,8 @@ class BLEConnectionService:Service() {
         updatePlaybackState(
             isPlaying = MediaDataStore.mediaState.playbackRate,
             totalDuration = MediaDataStore.mediaState.duration.toLong(),
-            elapsedTime = MediaDataStore.mediaState.elapsed.toLong()
+            elapsedTime = MediaDataStore.mediaState.elapsed.toLong(),
+            title = MediaDataStore.mediaState.title
         )
 
 
