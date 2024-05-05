@@ -34,9 +34,9 @@ object MediaDataStore{
 
     fun updateData(dataString: String, deviceName: String = ""){
         mediaState = setMediaData(dataString, mediaState, deviceName)
-        notifyService()
         Log.i("MediaDataStore", mediaState.toString())
         viewModel?.updateData(dataString, deviceName)
+        notifyService()
     }
 
     fun updateArtwork(artwork: Bitmap?){
@@ -46,9 +46,9 @@ object MediaDataStore{
         }
         Log.i("MediaDataStore", "Updating artwork")
         updatePalette(artwork)
-        notifyService()
         mediaState = updateAlbumArt(artwork, mediaState)
         viewModel?.updateArtwork(artwork)
+        notifyService()
     }
 
     fun updateVolume(volume:Double? = null, change: Float = 0.0f){
