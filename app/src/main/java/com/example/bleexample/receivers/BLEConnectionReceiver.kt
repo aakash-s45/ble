@@ -10,6 +10,7 @@ class BLEConnectionReceiver: BroadcastReceiver() {
         Log.d("BLEConnectionReceiver", "onReceive")
         if(p1!=null){
             Log.d("BLEConnectionReceiver", p1.action.toString())
+
         }
         else{
             Log.d("BLEConnectionReceiver", "Intent is null")
