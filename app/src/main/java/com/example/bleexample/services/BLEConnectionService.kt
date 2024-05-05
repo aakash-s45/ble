@@ -55,12 +55,7 @@ class BLEConnectionService:Service() {
         notificationCompatManager = NotificationManagerCompat.from(applicationContext)
         mediaSessionCompat = MediaSessionCompat(applicationContext, "tag")
         val notification = showNotification()
-        if (notificationCompatManager == null) {
-            startForeground(1, notification)
-        }
-        else{
-            notificationCompatManager?.notify(1, notification)
-        }
+        startForeground(1, notification)
         isServiceRunning = true
         NewServer.start(application)
     }
