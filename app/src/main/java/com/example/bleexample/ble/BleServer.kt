@@ -15,7 +15,6 @@ import android.bluetooth.BluetoothServerSocket
 import android.util.Log
 import com.example.bleexample.models.MediaDataStore
 import com.example.bleexample.models.MediaState
-import com.example.bleexample.models.NewServer
 import com.example.bleexample.models.PacketManager
 import com.example.bleexample.models.TAG
 import com.example.bleexample.models.TG
@@ -116,7 +115,6 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
                 deviceName = device.name
 //                TODO: store this data somewhere else
                 MediaDataStore.updateData("",deviceName)
-                NewServer.notifyWithResponse("CONNECTED")
                 Log.d(TG, "Server connected to ${device.address}")
                 try {
                     bleDevice = device

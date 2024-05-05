@@ -1,6 +1,7 @@
 package com.example.bleexample.screens
 
 import android.app.Activity
+import android.content.Intent
 import android.graphics.Bitmap
 import android.util.Log
 import androidx.compose.animation.core.animateFloatAsState
@@ -45,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -59,6 +61,7 @@ import com.example.bleexample.models.CurrentMedia
 import com.example.bleexample.models.MediaViewModel
 import com.example.bleexample.models.PacketManager
 import com.example.bleexample.models.RC
+import com.example.bleexample.services.BLEConnectionService
 
 private val hexArray = "0123456789ABCDEF".toCharArray()
 fun bytesToHex(bytes: ByteArray): String {
@@ -170,6 +173,8 @@ fun ImagePlaceholder(data: Bitmap? = null, isPlaying: Boolean = false){
 @Composable
 fun MusicTitle(title:String, artist:String){
     val boxHeight = 80.dp
+//    TODO: remove this context from here
+    val context = LocalContext.current
     Row (horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier){
         Box(modifier = Modifier
             .weight(0.75f)
@@ -188,6 +193,11 @@ fun MusicTitle(title:String, artist:String){
             Box (modifier = Modifier
                 .clip(CircleShape)
                 .background(color = Color(255, 255, 255, 60))
+                .clickable {
+                    val intent = Intent(context, BLEConnectionService::class.java)
+                    intent.action = BLEConnectionService.ACTIONS.STOP.toString()
+                    context.stopService(intent)
+                }
             ){
                 Icon(
                     imageVector = Icons.Rounded.MoreVert,
