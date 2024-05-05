@@ -1,18 +1,12 @@
 package com.example.bleexample.services
 
-import android.app.ActivityManager
 import android.app.Notification
-import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import android.os.IBinder
 import android.support.v4.media.session.MediaSessionCompat
 import android.util.Log
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.example.bleexample.R
@@ -21,7 +15,8 @@ import com.example.bleexample.models.NewServer
 
 
 class BLEConnectionService:Service() {
-    private var notificationManager: NotificationManager? = null
+    private var notificationCompatManager: NotificationManagerCompat? = null
+    private var mediaSessionCompat: MediaSessionCompat? = null
     private var isServiceRunning = false
     override fun onBind(intent: Intent?): IBinder? {
         return null
@@ -37,6 +32,7 @@ class BLEConnectionService:Service() {
                 ACTIONS.UPDATE.toString() -> {
                     Log.i("BLEService", MediaDataStore.mediaState.title)
 //                    TODO: update notification here
+                    updateNotification()
 //                    onStart()
                 }
             }
@@ -52,20 +48,45 @@ class BLEConnectionService:Service() {
 
 
     fun onStart() {
-        val notificationCompatManager : NotificationManagerCompat = NotificationManagerCompat.from(applicationContext)
-        val mediaSessionCompat = MediaSessionCompat(applicationContext, "tag")
+        MediaDataStore.setAppContext(application)
+        if(isServiceRunning){
+            return
+        }
+        notificationCompatManager = NotificationManagerCompat.from(applicationContext)
+        mediaSessionCompat = MediaSessionCompat(applicationContext, "tag")
+        val notification = showNotification()
+        if (notificationCompatManager == null) {
+            startForeground(1, notification)
+        }
+        else{
+            notificationCompatManager?.notify(1, notification)
+        }
+        isServiceRunning = true
+        NewServer.start(application)
+    }
 
-        val image : Bitmap = BitmapFactory.decodeResource(resources, R.drawable.placeholder_albumart)
-        val title = "Title"
-        val artist = "Artist"
+    private fun updateNotification(){
+        val notification = showNotification()
+        notificationCompatManager?.notify(1,notification)
+    }
 
-        val playImage =  R.drawable.play
-        val pauseImage = R.drawable.pause
-        val nextImage = R.drawable.next
-        var previousImage = R.drawable.prev
+    private fun showNotification(): Notification {
+        val image: Bitmap? = MediaDataStore.mediaState.artwork
+        val title = MediaDataStore.mediaState.title
+        val artist = MediaDataStore.mediaState.artist
+
+//        val playImage = R.drawable.play
+//        val pauseImage = R.drawable.pause
+//        val nextImage = R.drawable.next
+//        var previousImage = R.drawable.prev
+
+        val playImage = android.R.drawable.ic_media_play
+        val pauseImage = android.R.drawable.ic_media_pause
+        val nextImage = android.R.drawable.ic_media_next
+        val previousImage = android.R.drawable.ic_media_previous
 
 
-        val notification = NotificationCompat.Builder(applicationContext, "ble_sync_channel")
+        return NotificationCompat.Builder(applicationContext, "ble_sync_channel")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(artist)
@@ -79,18 +100,9 @@ class BLEConnectionService:Service() {
             .setStyle(
                 androidx.media.app.NotificationCompat.MediaStyle()
                     .setShowActionsInCompactView(0, 1, 2)
-                    .setMediaSession(mediaSessionCompat.sessionToken)
+                    .setMediaSession(mediaSessionCompat!!.sessionToken)
             )
             .build()
-
-        if (notificationCompatManager == null) {
-            startForeground(1, notification)
-        }
-        else{
-            notificationCompatManager?.notify(1, notification)
-        }
-        isServiceRunning = true
-        NewServer.start(application)
     }
 
 
