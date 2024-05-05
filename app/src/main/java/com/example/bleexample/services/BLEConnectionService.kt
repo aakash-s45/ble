@@ -5,7 +5,9 @@ import android.app.Service
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.IBinder
+import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -46,6 +48,24 @@ class BLEConnectionService:Service() {
         isServiceRunning = false
     }
 
+    fun updatePlaybackState(isPlaying: Boolean, totalDuration: Long, elapsedTime: Long) {
+        Log.i("updatePlaybackState", "$isPlaying, $totalDuration, $elapsedTime")
+        val playbackStateBuilder = PlaybackStateCompat.Builder()
+            .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_SEEK_TO)
+            .setState(
+                if (isPlaying) PlaybackStateCompat.STATE_PLAYING
+                else PlaybackStateCompat.STATE_PAUSED,
+                elapsedTime,
+                1f
+            )
+         mediaSessionCompat?.setPlaybackState(playbackStateBuilder.build())
+
+        val metadataBuilder = MediaMetadataCompat.Builder()
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "Media Title")
+            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, totalDuration)
+        mediaSessionCompat?.setMetadata(metadataBuilder.build())
+    }
+
 
     fun onStart() {
         MediaDataStore.setAppContext(application)
@@ -69,16 +89,25 @@ class BLEConnectionService:Service() {
         val image: Bitmap? = MediaDataStore.mediaState.artwork
         val title = MediaDataStore.mediaState.title
         val artist = MediaDataStore.mediaState.artist
+        mediaSessionCompat?.isActive = MediaDataStore.mediaState.playbackRate
 
-//        val playImage = R.drawable.play
-//        val pauseImage = R.drawable.pause
-//        val nextImage = R.drawable.next
-//        var previousImage = R.drawable.prev
+        updatePlaybackState(
+            isPlaying = MediaDataStore.mediaState.playbackRate,
+            totalDuration = MediaDataStore.mediaState.duration.toLong(),
+            elapsedTime = MediaDataStore.mediaState.elapsed.toLong()
+        )
 
-        val playImage = android.R.drawable.ic_media_play
-        val pauseImage = android.R.drawable.ic_media_pause
-        val nextImage = android.R.drawable.ic_media_next
-        val previousImage = android.R.drawable.ic_media_previous
+
+        val nextImage = R.drawable.ic_media_next
+        var previousImage = R.drawable.ic_media_previous
+
+        val centerAction =  if (MediaDataStore.mediaState.playbackRate){
+            R.drawable.ic_media_pause
+        }
+        else{
+            R.drawable.ic_media_play
+        }
+
 
 
         return NotificationCompat.Builder(applicationContext, "ble_sync_channel")
@@ -86,11 +115,11 @@ class BLEConnectionService:Service() {
             .setContentTitle(title)
             .setContentText(artist)
             .setOnlyAlertOnce(true)
-            .setColor(resources.getColor(R.color.purple_200))
+            .setColor(resources.getColor(R.color.black))
             .setLargeIcon(image)
             .setCustomBigContentView(null)
             .addAction(previousImage, "Previous", null) // Add previous action
-            .addAction(playImage, "Play", null) // Add play action
+            .addAction(centerAction, "Play", null) // Add play action
             .addAction(nextImage, "Next", null) // Add next action
             .setStyle(
                 androidx.media.app.NotificationCompat.MediaStyle()
