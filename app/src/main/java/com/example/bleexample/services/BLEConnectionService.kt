@@ -8,6 +8,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.bleexample.R
+import com.example.bleexample.models.MediaDataStore
 import com.example.bleexample.models.MediaViewModel
 import com.example.bleexample.models.NewServer
 
@@ -20,9 +21,17 @@ class BLEConnectionService:Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent != null) {
-            Log.i("BLEService", intent.action.toString())
+            val action = intent.action
+            Log.i("BLEService", action.toString())
+            when(action){
+                ACTIONS.START.toString() -> onStart()
+                ACTIONS.STOP.toString() -> NewServer.stop()
+                ACTIONS.UPDATE.toString() -> {
+                    Log.i("BLEService", MediaDataStore.mediaState.title)
+//                    TODO: update notification here
+                }
+            }
         }
-        onStart()
         return super.onStartCommand(intent, flags, startId)
     }
 
@@ -42,6 +51,15 @@ class BLEConnectionService:Service() {
             notificationManager?.notify(1, notification)
         }
         NewServer.start(application)
+        MediaDataStore.setAppContext(application)
+    }
+
+
+
+    enum class ACTIONS {
+        START,
+        STOP,
+        UPDATE
     }
 
 }

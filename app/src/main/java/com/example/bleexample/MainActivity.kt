@@ -22,10 +22,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.example.bleexample.models.MediaViewModel
-import com.example.bleexample.models.NewServer
 import com.example.bleexample.models.PacketManager
 import com.example.bleexample.models.RC
 import com.example.bleexample.screens.MediaPage
+import com.example.bleexample.services.BLEConnectionService
 import com.example.bleexample.ui.theme.BLEExampleTheme
 import com.example.bleexample.utils.askPermissions
 import com.example.bleexample.utils.enableLocation
@@ -56,16 +56,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         Log.i("onStart", "starting")
-//        val intent = Intent(applicationContext, BLEConnectionService::class.java)
-//        intent.action = "Start"
-//        applicationContext.startService(intent)
-        NewServer.start(application)
-        NewServer.setViewModel(mediaViewModel)
+        val intent = Intent(applicationContext, BLEConnectionService::class.java)
+        intent.action = BLEConnectionService.ACTIONS.START.toString()
+        applicationContext.startService(intent)
         super.onStart()
     }
     override fun onStop() {
         super.onStop()
-        NewServer.stop()
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {

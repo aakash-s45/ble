@@ -13,8 +13,8 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothServerSocket
 import android.util.Log
+import com.example.bleexample.models.MediaDataStore
 import com.example.bleexample.models.MediaState
-import com.example.bleexample.models.MediaViewModel
 import com.example.bleexample.models.PacketManager
 import com.example.bleexample.models.TAG
 import com.example.bleexample.models.TG
@@ -33,7 +33,6 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
     private var bleDevice: BluetoothDevice? = null
 
     private var mediaData: MediaState? = null
-    private var viewModel: MediaViewModel? = null
     private var deviceName: String = ""
 
 
@@ -60,15 +59,6 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
         }
     }
 
-    fun setViewModel(mediaViewModel: MediaViewModel? = null){
-        if (mediaViewModel != null) {
-            Log.i("123BLEServer", "Setting view-model")
-            this.viewModel = mediaViewModel
-        }
-        else{
-            Log.i("123BLEServer", "No view-model")
-        }
-    }
 
     @SuppressLint("MissingPermission")
     fun sendMessage(message: String){
@@ -123,7 +113,8 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
             )
             if (isSuccess && isConnected) {
                 deviceName = device.name
-                viewModel?.updateData("",deviceName)
+//                TODO: store this data somewhere else
+                MediaDataStore.updateData("",deviceName)
                 Log.d(TG, "Server connected to ${device.address}")
                 try {
                     bleDevice = device

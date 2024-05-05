@@ -30,11 +30,6 @@ object NewServer{
         }
     }
 
-    fun setViewModel(mediaViewModel: MediaViewModel? = null){
-        bleServer?.setViewModel(mediaViewModel)
-        PacketManager.setViewModel(mediaViewModel)
-    }
-
     fun stop(){
         bleServer?.stop()
     }

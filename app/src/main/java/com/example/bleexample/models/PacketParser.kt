@@ -42,7 +42,7 @@ object PacketManager{
     private val METADATA:Char = 'M'
     private val REMOTE:Char = 'R'
 
-    private var viewModel:MediaViewModel? = null
+
     private var buffer =  mutableMapOf<Int, ByteArray>()
     private var totalPackets = 0
     private var connectionState:ConnectionState = ConnectionState.IDLE
@@ -51,14 +51,7 @@ object PacketManager{
     private var remotePacketReadCount = 3
     private var method = "reliable"
 
-    fun setViewModel(viewModel: MediaViewModel?){
-        this.viewModel = viewModel
-    }
      fun parse(byteArray: ByteArray, deviceName: String = ""){
-         if (this.viewModel == null){
-             Log.i("Delegator", "Viewmodel is null")
-             return
-         }
         if (byteArray.size < 5) {
             Log.i("Delegator", "Not enough bytes to parse")
             // Not enough bytes to parse
@@ -89,7 +82,7 @@ object PacketManager{
     fun handleMetaData(packet: BPacket, deviceName: String = ""){
         val data = packet.data.toString(Charsets.UTF_8)
         Log.d("handleMetaData", data)
-        viewModel?.updateData(data, deviceName)
+        MediaDataStore.updateData(data, deviceName)
     }
 
     fun handleRemoteEvents(packet: BPacket){
@@ -118,7 +111,7 @@ object PacketManager{
             Log.i("bitmap", combinedByteArray.size.toString())
             Log.i("bitmap", combinedByteArray.toString())
             Log.i("bitmap", bitmap.height.toString())
-            viewModel?.updateArtwork(bitmap)
+            MediaDataStore.updateArtwork(bitmap)
         }
         else{
             NewServer.notifyWithResponse("ACK:${nextPakcetSeq}")
@@ -136,7 +129,7 @@ object PacketManager{
                 buffer.values.forEach { write(it) }
             }.toByteArray()
             val bitmap = BitmapFactory.decodeByteArray(combinedByteArray, 0, combinedByteArray.size)
-            viewModel?.updateArtwork(bitmap)
+            MediaDataStore.updateArtwork(bitmap)
         }
         else if(packet.seq + 1 == totalPackets && buffer.size != totalPackets){
             Log.e("handleGraphicsDataFast", "Maybe some error has occurred, use reliable method")
@@ -160,7 +153,7 @@ object PacketManager{
         var _packet:BPacket? = null
         _packet = when(control){
             RC.PLAY -> {
-                viewModel?.updateVolume()
+                MediaDataStore.updateVolume()
                 BPacket('R',1, "PLAY".toByteArray())
             }
 
@@ -181,12 +174,12 @@ object PacketManager{
             }
 
             RC.VOL_INC -> {
-                viewModel?.updateVolume(change = 0.0625f)
+                MediaDataStore.updateVolume(change = 0.0625f)
                 BPacket('R',1, "VINC".toByteArray())
             }
 
             RC.VOL_DEC -> {
-                viewModel?.updateVolume(change = -0.0625f)
+                MediaDataStore.updateVolume(change = -0.0625f)
                 BPacket('R',1, "VDEC".toByteArray())
             }
 
