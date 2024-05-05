@@ -123,9 +123,9 @@ class BLEConnectionService:Service() {
 
         updatePlaybackState(
             isPlaying = MediaDataStore.mediaState.playbackRate,
-            totalDuration = MediaDataStore.mediaState.duration.toLong()*1000,
+            totalDuration = MediaDataStore.mediaState.duration.toLong(),
             elapsedTime = MediaDataStore.mediaState.elapsed.toLong(),
-            title = MediaDataStore.mediaState.title,
+            title = MediaDataStore.mediaState.title
         )
         mediaSessionCompat?.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
@@ -148,10 +148,6 @@ class BLEConnectionService:Service() {
                 Log.i("MediaSessionIntents", "onSkipToPrevious")
             }
         })
-
-
-        val nextImage = R.drawable.ic_media_next
-        var previousImage = R.drawable.ic_media_previous
 
 
         return NotificationCompat.Builder(applicationContext, "ble_sync_channel")
