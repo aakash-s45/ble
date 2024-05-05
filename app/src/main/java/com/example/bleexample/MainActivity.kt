@@ -21,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.core.app.NotificationManagerCompat
 import com.example.bleexample.models.MediaDataStore
 import com.example.bleexample.models.MediaViewModel
 import com.example.bleexample.models.PacketManager
@@ -91,6 +92,18 @@ class MainActivity : ComponentActivity() {
         if(!isLocationEnabled(this) && Build.VERSION.SDK_INT <= Build.VERSION_CODES.R){
             Toast.makeText(this, "Location is required for this app to run", Toast.LENGTH_SHORT).show()
             enableLocation(this)
+        }
+
+//        check and ask for notification permission
+        if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+            Toast.makeText(this, "Notifications are required for this app to run", Toast.LENGTH_SHORT).show()
+            NotificationManagerCompat.from(this).apply {
+                val intent = Intent().apply {
+                    action = "android.settings.APP_NOTIFICATION_SETTINGS"
+                    putExtra("android.provider.extra.APP_PACKAGE", packageName)
+                }
+                startActivity(intent)
+            }
         }
 
         // Register for broadcasts when a device is discovered

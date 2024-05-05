@@ -1,6 +1,8 @@
 package com.example.bleexample.services
 
 import android.app.Notification
+import android.app.PendingIntent
+import android.app.PendingIntent.getBroadcast
 import android.app.Service
 import android.content.Intent
 import android.graphics.Bitmap
@@ -59,10 +61,9 @@ class BLEConnectionService:Service() {
             .setActions(
                 PlaybackStateCompat.ACTION_PLAY or
                         PlaybackStateCompat.ACTION_PAUSE or
-                        PlaybackStateCompat.ACTION_SEEK_TO
-//                or
-//                        PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-//                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+                        PlaybackStateCompat.ACTION_SEEK_TO or
+                        PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
             )
             .setState(
                 if (isPlaying) PlaybackStateCompat.STATE_PLAYING
@@ -108,20 +109,48 @@ class BLEConnectionService:Service() {
             action = "PLAY"
         }
 
+        val playPendingIntent = getBroadcast(
+            applicationContext,
+            0,
+            playIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val pauseIntent = Intent(applicationContext, BLEConnectionReceiver::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             action = "PAUSE"
         }
+
+        val pausePendingIntent = getBroadcast(
+            applicationContext,
+            0,
+            pauseIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val nextIntent = Intent(applicationContext, BLEConnectionReceiver::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             action = "NEXT"
         }
 
+        val nextPendingIntent = getBroadcast(
+            applicationContext,
+            0,
+            nextIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val previousIntent = Intent(applicationContext, BLEConnectionReceiver::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             action = "PREVIOUS"
         }
+
+        val previousPendingIntent = getBroadcast(
+            applicationContext,
+            0,
+            previousIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
 
         updatePlaybackState(
@@ -155,6 +184,13 @@ class BLEConnectionService:Service() {
         val nextImage = R.drawable.ic_media_next
         var previousImage = R.drawable.ic_media_previous
 
+        val playPausePendingIntent = if(MediaDataStore.mediaState.playbackRate){
+            pausePendingIntent
+        }
+        else{
+            playPendingIntent
+        }
+
         val centerAction =  if (MediaDataStore.mediaState.playbackRate){
             R.drawable.ic_media_pause
         }
@@ -171,9 +207,9 @@ class BLEConnectionService:Service() {
             .setColor(resources.getColor(R.color.black))
             .setLargeIcon(image)
             .setCustomBigContentView(null)
-            .addAction(previousImage, "Previous", null) // Add previous action
-            .addAction(centerAction, "Play", null) // Add play action
-            .addAction(nextImage, "Next", null) // Add next action
+            .addAction(previousImage, "Previous", previousPendingIntent) // Add previous action
+            .addAction(centerAction, "Play", playPausePendingIntent) // Add play action
+            .addAction(nextImage, "Next", nextPendingIntent) // Add next action
             .setStyle(
                 androidx.media.app.NotificationCompat.MediaStyle()
                     .setShowActionsInCompactView(0, 1, 2)
