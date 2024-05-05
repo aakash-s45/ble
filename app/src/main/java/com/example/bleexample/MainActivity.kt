@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -20,9 +21,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.example.bleexample.models.BLEScanViewModel
 import com.example.bleexample.models.MediaViewModel
 import com.example.bleexample.models.NewServer
+import com.example.bleexample.models.PacketManager
+import com.example.bleexample.models.RC
 import com.example.bleexample.screens.MediaPage
 import com.example.bleexample.ui.theme.BLEExampleTheme
 import com.example.bleexample.utils.askPermissions
@@ -33,7 +35,6 @@ import com.example.bleexample.utils.requiredPermissionsInitialClient
 const val TAG = "MainActivity"
 
 class MainActivity : ComponentActivity() {
-    private lateinit var viewModel:BLEScanViewModel
     lateinit var bluetoothAdapter:BluetoothAdapter
     private val mediaViewModel by viewModels<MediaViewModel>()
 
@@ -54,13 +55,25 @@ class MainActivity : ComponentActivity() {
             }
 
     override fun onStart() {
-        super.onStart()
+        Log.i("onStart", "starting")
+//        val intent = Intent(applicationContext, BLEConnectionService::class.java)
+//        intent.action = "Start"
+//        applicationContext.startService(intent)
         NewServer.start(application)
         NewServer.setViewModel(mediaViewModel)
+        super.onStart()
     }
     override fun onStop() {
         super.onStop()
         NewServer.stop()
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        when (keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP -> PacketManager.sendRemotePacket(RC.VOL_INC)
+            KeyEvent.KEYCODE_VOLUME_DOWN -> PacketManager.sendRemotePacket(RC.VOL_DEC)
+        }
+        return true
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,7 +92,7 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Location is required for this app to run", Toast.LENGTH_SHORT).show()
             enableLocation(this)
         }
-        viewModel = BLEScanViewModel(bluetoothAdapter)
+
         // Register for broadcasts when a device is discovered
         val filter = IntentFilter()
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED)

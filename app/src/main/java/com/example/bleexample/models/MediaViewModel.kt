@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 
 //Message received: M_Meet Me Halfway_The Black Eyed Peas__289.341_156.74562258299144_false_Safari
 class MediaViewModel:ViewModel(){
-    private val _mediaState = MutableStateFlow(CurrentMedia("","","",100.0,false,"",0.0,"", null, palette = null))
+    private val _mediaState = MutableStateFlow(CurrentMedia("","","",100.0,false,"",0.0,"", null, palette = null, volume = 0.0f))
     private var timerJob:Job? = null
 
     var mediaState: StateFlow<CurrentMedia> = _mediaState.asStateFlow()
@@ -51,6 +51,21 @@ class MediaViewModel:ViewModel(){
         }
         Log.i("MediaViewModel", _mediaState.toString())
     }
+
+    fun updateVolume(volume:Double? = null, change: Float = 0.0f){
+        if (volume != null) {
+            _mediaState.update {
+                it.copy(volume = volume.toFloat())
+            }
+        }
+        else{
+            _mediaState.update {
+                it.copy(volume = it.volume+change)
+            }
+        }
+
+    }
+
 
     fun updateElapsedTime(elapsedTime: Double){
         _mediaState.update {
@@ -98,6 +113,7 @@ data class CurrentMedia(
     val elapsed: Double,
     val deviceName: String,
     val artwork: Bitmap?,
+    var volume: Float,
     val palette: Palette?,
 )
 
@@ -109,13 +125,14 @@ fun setMediaData(dataString: String, currentMediaState: CurrentMedia, deviceName
     var elapsed: Double = 0.0
     var playbackRate: Boolean = false
     var bundle: String = ""
+    var volume: Float = 0.0F
 //    var artwork: Bitmap? = null
 
     val parts = dataString.split("_")
     if(parts.isNotEmpty() && parts[0] != "M"){
         return currentMediaState.copy(deviceName = deviceName)
     }
-    if (parts.size == 8) {
+    if (parts.size == 9) {
         title = parts[1]
         artist = parts[2]
         album = parts[3]
@@ -123,10 +140,11 @@ fun setMediaData(dataString: String, currentMediaState: CurrentMedia, deviceName
         elapsed = parts[5].toDoubleOrNull() ?: 0.0
         playbackRate = parts[6].toBoolean()
         bundle = parts[7]
+        volume = parts[8].toFloat()
     }
     Log.i("MVModel", "Updated media data")
 //    TODO: set the value of artwork later
-    return currentMediaState.copy(title=title, artist=artist, album=album, duration=duration, playbackRate=playbackRate, bundle=bundle, elapsed=elapsed, deviceName=deviceName)
+    return currentMediaState.copy(title=title, artist=artist, album=album, duration=duration, playbackRate=playbackRate, bundle=bundle, elapsed=elapsed, deviceName=deviceName, volume=volume)
 }
 
 fun updateAlbumArt(artwork: Bitmap, currentMediaState: CurrentMedia):CurrentMedia {

@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
@@ -95,16 +96,30 @@ fun MediaPlayer(currentMedia: CurrentMedia, viewModel: MediaViewModel){
         bgColor = defaultBackdropColor.toArgb()
     }
     val view = LocalView.current
+    val colorStops = arrayOf(
+        0.4f to Color(bgColor),
+        1f to Color(0, 0, 0, 200)
+    )
+    val deviceName = if(currentMedia.bundle.isNotEmpty()){
+        "${currentMedia.deviceName} | ${currentMedia.bundle}"
+    }
+    else{
+        currentMedia.deviceName
+    }
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = bgColor
-            window.navigationBarColor = Color.White.toArgb()
         }
     }
+    
     Box (modifier = Modifier
         .fillMaxSize()
         .background(color = Color(bgColor))){
+    }
+    Box (modifier = Modifier
+        .fillMaxSize()
+        .background(Brush.verticalGradient(colorStops = colorStops))){
     }
 
     Column(modifier = Modifier
@@ -115,13 +130,13 @@ fun MediaPlayer(currentMedia: CurrentMedia, viewModel: MediaViewModel){
         Spacer(modifier = Modifier.height(40.dp))
         MusicTitle(currentMedia.title, currentMedia.artist)
         Spacer(modifier = Modifier.height(10.dp))
-        ProgressBar(viewModel, totalTime = currentMedia.duration, elapsedTime = currentMedia.elapsed, deviceName = currentMedia.deviceName)
+        ProgressBar(viewModel, totalTime = currentMedia.duration, elapsedTime = currentMedia.elapsed, deviceName = deviceName)
         Spacer(modifier = Modifier.height(15.dp))
         PlayerButtons(currentMedia) {
             viewModel.togglePlayPause()
         }
         Spacer(modifier = Modifier.height(18.dp))
-        VolumeController(30.0, color = Color(194, 192, 192, 255))
+        VolumeController((currentMedia.volume*100).toDouble(), color = Color(194, 192, 192, 255), viewModel = viewModel)
     }
 }
 
@@ -277,6 +292,7 @@ fun PlayerButtons(currentMedia: CurrentMedia, toggle: ()->Unit){
                 .clip(CircleShape)
                 .clickable {
                     toggle()
+                    PacketManager.sendRemotePacket(RC.PLAY)
                 },
             contentAlignment = Alignment.Center
         ){
@@ -284,9 +300,6 @@ fun PlayerButtons(currentMedia: CurrentMedia, toggle: ()->Unit){
                 modifier = Modifier
                     .size(65.dp)
                     .shadow(elevation = shadowElevation)
-                    .clickable {
-                        PacketManager.sendRemotePacket(RC.PLAY)
-                    }
             )
         }
         Icon(painter = painterResource(id = R.drawable.next), contentDescription = "next", tint = tint, modifier = Modifier
@@ -299,10 +312,10 @@ fun PlayerButtons(currentMedia: CurrentMedia, toggle: ()->Unit){
 
 
 @Composable
-fun VolumeController(volume:Double, color:Color = Color.White){
-    var currentVolume by remember {
-        mutableStateOf(50.0)
-    }
+fun VolumeController(volume:Double, viewModel: MediaViewModel, color:Color = Color.White){
+//    var currentVolume by remember {
+//        mutableStateOf(volume)
+//    }
     Row(modifier = Modifier
         .padding(40.dp,0.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -315,18 +328,18 @@ fun VolumeController(volume:Double, color:Color = Color.White){
                 .size(18.dp)
                 .weight(1f)
                 .clickable {
-                    currentVolume = 0.0
+                    viewModel.updateVolume(0.0)
                     PacketManager.sendRemotePacket(RC.VOL_MIN)
                 },
             tint = color
         )
         Spacer(modifier = Modifier.width(5.dp))
 //        SeekBar(fraction = volume, modifier = Modifier.weight(8f))
-        CustomSeekBar(targetValue = 100.0, currentValue = currentVolume, primaryColor = color, modifier = Modifier
+        CustomSeekBar(targetValue = 100.0, currentValue = volume, primaryColor = color, modifier = Modifier
             .height(6.dp)
             .weight(8f)
             ,onPositionChange = { newPosition ->
-                    currentVolume = newPosition*100.0
+                viewModel.updateVolume(newPosition)
 //
         }, onInteractionEnd = {
                 PacketManager.sendRemotePacket(RC.SEEK_VOL, it*100.0)
@@ -339,7 +352,7 @@ fun VolumeController(volume:Double, color:Color = Color.White){
                 .size(20.dp)
                 .weight(1f)
                 .clickable {
-                    currentVolume = 100.00
+                    viewModel.updateVolume(1.00)
                     PacketManager.sendRemotePacket(RC.VOL_PLUS)
                 }
             ,

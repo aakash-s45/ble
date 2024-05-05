@@ -39,12 +39,6 @@ object NewServer{
         bleServer?.stop()
     }
 
-    fun sendMessage(message: String){
-        count+=1
-        var newmessage = "$message c:$count"
-        bleServer?.sendMessage(newmessage)
-    }
-
     fun notifyWithResponse(message: String){
         val _message = "N$message"
         bleServer?.notifyResponse(_message)

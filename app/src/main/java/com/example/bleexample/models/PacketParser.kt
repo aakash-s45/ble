@@ -15,7 +15,9 @@ enum class RC{
     SEEK,
     SEEK_VOL,
     VOL_PLUS,
+    VOL_INC,
     VOL_MIN,
+    VOL_DEC,
     NEXT,
     PREV
 }
@@ -47,6 +49,7 @@ object PacketManager{
     private var nextPakcetSeq = -1
     var remotePacket:BPacket? = null
     private var remotePacketReadCount = 3
+    private var method = "reliable"
 
     fun setViewModel(viewModel: MediaViewModel?){
         this.viewModel = viewModel
@@ -94,6 +97,10 @@ object PacketManager{
 
     }
     fun handleGraphicsData(packet: BPacket){
+        if (method == "fast"){
+            handleGraphicsDataFast(packet)
+            return
+        }
 //        TODO: add time thing also
         Log.i("handleGraphicsData", packet.seq.toString())
         if(packet.seq == this.nextPakcetSeq){
@@ -118,8 +125,29 @@ object PacketManager{
         }
     }
 
+    fun handleGraphicsDataFast(packet: BPacket){
+//        TODO: add time thing also
+        Log.i("handleGraphicsDataFast", packet.seq.toString())
+        if(packet.data.isNotEmpty()){
+            buffer[packet.seq] = packet.data
+        }
+        if(packet.seq + 1 == totalPackets && buffer.size == totalPackets){
+            val combinedByteArray = ByteArrayOutputStream().apply {
+                buffer.values.forEach { write(it) }
+            }.toByteArray()
+            val bitmap = BitmapFactory.decodeByteArray(combinedByteArray, 0, combinedByteArray.size)
+            viewModel?.updateArtwork(bitmap)
+        }
+        else if(packet.seq + 1 == totalPackets && buffer.size != totalPackets){
+            Log.e("handleGraphicsDataFast", "Maybe some error has occurred, use reliable method")
+            Log.e("handleGraphicsDataFast", "seq: ${packet.seq}, totalPackets:$totalPackets, buffer.size:${buffer.size}")
+        }
+    }
+
     fun handleInitPacket(packet: BPacket){
         Log.i("handleInitPacket", packet.seq.toString())
+        Log.i("NewInitPacket", packet.data.decodeToString())
+        method = packet.data.decodeToString()
         buffer.clear()
         totalPackets = packet.seq
         connectionState = ConnectionState.IDLE
@@ -132,6 +160,7 @@ object PacketManager{
         var _packet:BPacket? = null
         _packet = when(control){
             RC.PLAY -> {
+                viewModel?.updateVolume()
                 BPacket('R',1, "PLAY".toByteArray())
             }
 
@@ -144,12 +173,23 @@ object PacketManager{
             }
 
             RC.VOL_PLUS -> {
-                BPacket('R',1, "V+".toByteArray())
+                BPacket('R',1, "VFULL".toByteArray())
             }
 
             RC.VOL_MIN -> {
-                BPacket('R',1, "V-".toByteArray())
+                BPacket('R',1, "VMUTE".toByteArray())
             }
+
+            RC.VOL_INC -> {
+                viewModel?.updateVolume(change = 0.0625f)
+                BPacket('R',1, "VINC".toByteArray())
+            }
+
+            RC.VOL_DEC -> {
+                viewModel?.updateVolume(change = -0.0625f)
+                BPacket('R',1, "VDEC".toByteArray())
+            }
+
 
             RC.SEEK -> {
                 BPacket('R',2, "SEEKM:$seekValue".toByteArray())
