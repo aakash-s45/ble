@@ -21,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.example.bleexample.models.MediaDataStore
 import com.example.bleexample.models.MediaViewModel
 import com.example.bleexample.models.PacketManager
 import com.example.bleexample.models.RC
@@ -59,6 +60,8 @@ class MainActivity : ComponentActivity() {
         val intent = Intent(applicationContext, BLEConnectionService::class.java)
         intent.action = BLEConnectionService.ACTIONS.START.toString()
         applicationContext.startService(intent)
+        MediaDataStore.setViewModel(mediaViewModel)
+        mediaViewModel.updateState(MediaDataStore.mediaState)
         super.onStart()
     }
     override fun onStop() {

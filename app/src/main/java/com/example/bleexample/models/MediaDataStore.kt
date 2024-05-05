@@ -12,9 +12,15 @@ object MediaDataStore{
     var mediaState = CurrentMedia("","","",100.0,false,"",0.0,"", null, palette = null, volume = 0.0f)
         private set
     private lateinit var application: Application
+    private var viewModel: MediaViewModel? = null
 
     fun setAppContext(app:Application){
         this.application = app
+    }
+
+    fun setViewModel(viewModel: MediaViewModel){
+        Log.i("MediaDataStore", "adding viewmodel here")
+        this.viewModel = viewModel
     }
 
     private val notificationManager:NotificationManager? = null
@@ -23,12 +29,14 @@ object MediaDataStore{
         Palette.from(bitmap).generate { palette ->
             mediaState = mediaState.copy(palette = palette)
         }
+        viewModel?.updatePalette(bitmap)
     }
 
     fun updateData(dataString: String, deviceName: String = ""){
         mediaState = setMediaData(dataString, mediaState, deviceName)
         notifyService()
         Log.i("MediaDataStore", mediaState.toString())
+        viewModel?.updateData(dataString, deviceName)
     }
 
     fun updateArtwork(artwork: Bitmap?){
@@ -40,6 +48,7 @@ object MediaDataStore{
         updatePalette(artwork)
         notifyService()
         mediaState = updateAlbumArt(artwork, mediaState)
+        viewModel?.updateArtwork(artwork)
     }
 
     fun updateVolume(volume:Double? = null, change: Float = 0.0f){
@@ -49,16 +58,19 @@ object MediaDataStore{
         else{
             mediaState = mediaState.copy(volume = mediaState.volume+change)
         }
+        viewModel?.updateVolume(volume, change)
         notifyService()
     }
 
     fun updateElapsedTime(elapsedTime: Double){
         mediaState = mediaState.copy(elapsed = elapsedTime*mediaState.duration)
+        viewModel?.updateElapsedTime(elapsedTime)
         notifyService()
     }
 
     fun togglePlayPause(){
         mediaState = mediaState.copy(playbackRate = !mediaState.playbackRate)
+        viewModel?.togglePlayPause()
         notifyService()
     }
 

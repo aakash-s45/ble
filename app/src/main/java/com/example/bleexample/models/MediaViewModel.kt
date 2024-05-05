@@ -32,6 +32,10 @@ class MediaViewModel:ViewModel(){
         }
     }
 
+    fun updateState(currentMediaState: CurrentMedia){
+        _mediaState.update { currentMediaState }
+    }
+
     fun updateData(dataString: String, deviceName: String = ""){
         _mediaState.update {
             setMediaData(dataString, it, deviceName)
