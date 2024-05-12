@@ -158,7 +158,7 @@ class BLEConnectionService:Service() {
         )
 
         val openAppIntent = Intent(applicationContext, MainActivity::class.java)
-        val openAppPendingIntent = PendingIntent.getActivity(applicationContext, 0, openAppIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+        val openAppPendingIntent = PendingIntent.getActivity(applicationContext, 0, openAppIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         updatePlaybackState(
             isPlaying = MediaDataStore.mediaState.playbackRate,
