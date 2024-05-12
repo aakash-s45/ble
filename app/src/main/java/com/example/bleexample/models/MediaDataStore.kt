@@ -4,15 +4,28 @@ import android.app.Application
 import android.app.NotificationManager
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
 import android.util.Log
 import androidx.palette.graphics.Palette
 import com.example.bleexample.services.BLEConnectionService
+import com.example.bleexample.utils.imageString
 
 object MediaDataStore{
-    var mediaState = CurrentMedia("","","",100.0,false,"",0.0,"", null, palette = null, volume = 0.0f)
+    var defaultArtwork:Bitmap? = null
+    val initialMediaState = CurrentMedia("","","",100.0,false,"",0.0,"", null, palette = null, volume = 0.0f)
+    var mediaState = initialMediaState
         private set
     private lateinit var application: Application
     private var viewModel: MediaViewModel? = null
+
+    init {
+        val imageData = Base64.decode(imageString, Base64.DEFAULT)
+        defaultArtwork = BitmapFactory.decodeByteArray(imageData, 0, imageData.size)
+        if(mediaState.artwork == null && defaultArtwork != null){
+            mediaState = mediaState.copy(artwork = defaultArtwork)
+        }
+    }
 
     fun setAppContext(app:Application){
         this.application = app
@@ -56,7 +69,9 @@ object MediaDataStore{
             mediaState = mediaState.copy(volume = volume.toFloat())
         }
         else{
-            mediaState = mediaState.copy(volume = mediaState.volume+change)
+            var _volume = maxOf(0f, mediaState.volume+change)
+            _volume = minOf(mediaState.volume+change, 1f)
+            mediaState = mediaState.copy(volume = _volume)
         }
         viewModel?.updateVolume(volume, change)
         notifyService()

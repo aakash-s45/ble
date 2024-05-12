@@ -4,6 +4,8 @@ import android.graphics.BitmapFactory
 import android.util.Log
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
+import java.time.Duration
+import java.time.Instant
 
 enum class ConnectionState{
     IDLE,
@@ -37,10 +39,11 @@ fun BPacket.toData(): ByteArray {
 
 
 object PacketManager{
-     private val INIT:Char = 'I'
-    private val GRAPHICS:Char = 'G'
-    private val METADATA:Char = 'M'
-    private val REMOTE:Char = 'R'
+     private const val INIT:Char = 'I'
+    private const val GRAPHICS:Char = 'G'
+    private const val METADATA:Char = 'M'
+    private const val REMOTE:Char = 'R'
+    private const val ACCESS:Char = 'A'
 
 
     private var buffer =  mutableMapOf<Int, ByteArray>()
@@ -50,6 +53,13 @@ object PacketManager{
     var remotePacket:BPacket? = null
     private var remotePacketReadCount = 3
     private var method = "reliable"
+    private var accessKey:String? = null
+    private var lastNotificationInstant:Instant? = null
+    private var rateLimit = 500L
+
+    init {
+        lastNotificationInstant = Instant.now()
+    }
 
      fun parse(byteArray: ByteArray, deviceName: String = ""){
         if (byteArray.size < 5) {
@@ -65,6 +75,7 @@ object PacketManager{
                 ((seqBytes[2].toInt() and 0xFF) shl 8) or
                 (seqBytes[3].toInt() and 0xFF)
         val data = byteArray.sliceArray(5 until byteArray.size)
+         Log.i("PacketParse", type.toString())
         packetDelegator(BPacket(type, seq, data), deviceName )
     }
 
@@ -75,8 +86,13 @@ object PacketManager{
             GRAPHICS -> handleGraphicsData(packet)
             METADATA -> handleMetaData(packet, deviceName)
             REMOTE -> handleRemoteEvents(packet)
+            ACCESS -> handleAccessKeyPacket(packet)
         }
 
+    }
+
+    fun handleAccessKeyPacket(packet: BPacket){
+        this.accessKey = packet.data.toString(Charsets.UTF_8)
     }
 
     fun handleMetaData(packet: BPacket, deviceName: String = ""){
@@ -101,16 +117,10 @@ object PacketManager{
             nextPakcetSeq = packet.seq + 1
         }
         if(nextPakcetSeq == totalPackets){
-//            val combinedByteArray = buffer.values.flatMap { it.toList() }.toByteArray()
             val combinedByteArray = ByteArrayOutputStream().apply {
                 buffer.values.forEach { write(it) }
             }.toByteArray()
-//            val decodedBytes = Base64.decode(byteArray1, Base64.DEFAULT)
             val bitmap = BitmapFactory.decodeByteArray(combinedByteArray, 0, combinedByteArray.size)
-
-            Log.i("bitmap", combinedByteArray.size.toString())
-            Log.i("bitmap", combinedByteArray.toString())
-            Log.i("bitmap", bitmap.height.toString())
             MediaDataStore.updateArtwork(bitmap)
         }
         else{
@@ -138,8 +148,8 @@ object PacketManager{
     }
 
     fun handleInitPacket(packet: BPacket){
-        Log.i("handleInitPacket", packet.seq.toString())
-        Log.i("NewInitPacket", packet.data.decodeToString())
+        Log.d("handleInitPacket", packet.seq.toString())
+        Log.d("NewInitPacket", packet.data.decodeToString())
         method = packet.data.decodeToString()
         buffer.clear()
         totalPackets = packet.seq
@@ -149,7 +159,12 @@ object PacketManager{
 //        setup receiving
     }
 
-    fun sendRemotePacket(control:RC, seekValue:Double? = null){
+    fun sendRemotePacket(control:RC, seekValue:Double? = null, insecure:Boolean = true){
+        if(insecure){
+            sendRemotePacketInsecure(control, seekValue)
+            return
+        }
+
         var _packet:BPacket? = null
         _packet = when(control){
             RC.PLAY -> {
@@ -208,10 +223,59 @@ object PacketManager{
         NewServer.notifyWithResponse("READ")
 
 //        set the value in the variable if null (3 times only)
-//        notify
+//
 //        read request complete, set null
     }
 
+    private fun sendRemotePacketInsecure(control:RC, seekValue:Double? = null){
+        var notification_message:String? = null
+        notification_message = when(control){
+            RC.PLAY -> {
+                "PLAY"
+            }
+
+            RC.NEXT -> {
+                "NEXT"
+            }
+
+            RC.PREV -> {
+                "PREV"
+            }
+
+            RC.VOL_PLUS -> {
+                "VFULL"
+            }
+
+            RC.VOL_MIN -> {
+                "VMUTE"
+            }
+
+            RC.VOL_INC -> {
+                MediaDataStore.updateVolume(change = 0.0625f)
+                "VINC"
+            }
+
+            RC.VOL_DEC -> {
+                MediaDataStore.updateVolume(change = -0.0625f)
+                "VDEC"
+            }
+
+
+            RC.SEEK -> {
+                "SEEKM:$seekValue"
+            }
+
+            RC.SEEK_VOL -> {
+                "SEEKV:$seekValue"
+            }
+        }
+        if (notification_message != null && Duration.between(lastNotificationInstant, Instant.now()).toMillis() > rateLimit){
+            NewServer.notifyWithResponse("REMOTE:$notification_message")
+            lastNotificationInstant = Instant.now()
+
+        }
+
+    }
 
 
 }

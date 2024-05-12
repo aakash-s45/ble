@@ -8,10 +8,9 @@ import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.BluetoothLeAdvertiser
 import android.os.ParcelUuid
 import android.util.Log
+import com.example.bleexample.models.NewServer
 import com.example.bleexample.models.TG
 import com.example.bleexample.utils.myServiceUUID1
-import com.example.bleexample.utils.myServiceUUID2
-import java.util.UUID
 
 @SuppressLint("MissingPermission")
 class BleAdvertiser(bluetoothAdapter: BluetoothAdapter){
@@ -26,6 +25,7 @@ class BleAdvertiser(bluetoothAdapter: BluetoothAdapter){
         advertiseSettings = buildAdvertiseSettings()
         advertiseData = buildAdvertiseData()
     }
+
 
     @SuppressLint("MissingPermission")
     fun start(){
@@ -70,6 +70,7 @@ class BleAdvertiser(bluetoothAdapter: BluetoothAdapter){
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
             super.onStartSuccess(settingsInEffect)
             Log.d(TG, "Advertising successfully started")
+            NewServer.notifyWithResponse("CONNECT")
         }
     }
 }

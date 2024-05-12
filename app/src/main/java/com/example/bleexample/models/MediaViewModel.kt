@@ -130,7 +130,6 @@ fun setMediaData(dataString: String, currentMediaState: CurrentMedia, deviceName
     var playbackRate: Boolean = false
     var bundle: String = ""
     var volume: Float = 0.0F
-//    var artwork: Bitmap? = null
 
     val parts = dataString.split("_")
     if(parts.isNotEmpty() && parts[0] != "M"){

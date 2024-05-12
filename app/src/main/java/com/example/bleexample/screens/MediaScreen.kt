@@ -3,7 +3,9 @@ package com.example.bleexample.screens
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -24,8 +26,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.ModalBottomSheetLayout
+import androidx.compose.material.ModalBottomSheetState
+import androidx.compose.material.ModalBottomSheetValue
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.rememberModalBottomSheetState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +45,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,13 +57,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,9 +71,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.bleexample.R
 import com.example.bleexample.models.CurrentMedia
 import com.example.bleexample.models.MediaViewModel
+import com.example.bleexample.models.NewServer
 import com.example.bleexample.models.PacketManager
 import com.example.bleexample.models.RC
 import com.example.bleexample.services.BLEConnectionService
+import com.example.bleexample.utils.enableLocation
+import com.example.bleexample.utils.isLocationEnabled
+import kotlinx.coroutines.launch
 
 private val hexArray = "0123456789ABCDEF".toCharArray()
 fun bytesToHex(bytes: ByteArray): String {
@@ -75,25 +91,33 @@ fun bytesToHex(bytes: ByteArray): String {
     return String(hexChars)
 }
 
-@Preview(showSystemUi = true)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
-fun MediaPage() {
+fun MediaPage(activity: Activity) {
     val viewModel: MediaViewModel = viewModel()
     val currentMedia by viewModel.mediaState.collectAsState()
+    val sheetState = rememberModalBottomSheetState(
+        initialValue = ModalBottomSheetValue.Hidden
+    )
+    val modalScope = rememberCoroutineScope()
     Log.i("MediaPage", "Updated media page")
-    MediaPlayer(currentMedia = currentMedia, viewModel)
+    MediaPlayer(currentMedia = currentMedia, bottomSheetState = sheetState)
+    MyModalBottomSheet(sheetState = sheetState, activity = activity)
 
 }
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
-fun MediaPlayer(currentMedia: CurrentMedia, viewModel: MediaViewModel){
+fun MediaPlayer(currentMedia: CurrentMedia, bottomSheetState: ModalBottomSheetState){
 //    Background
+    val viewModel:MediaViewModel = viewModel()
     val scrrenPadding = 25.dp
     Log.i("Playbackrate", currentMedia.toString())
     var isPlaying by remember { mutableStateOf(currentMedia.playbackRate) }
 
 
-    val defaultBackdropColor = Color(55, 69, 94, 255)
+    val defaultBackdropColor =Color(53, 23, 23, 255)
+//    var bgColor = currentMedia.palette?.darkVibrantSwatch?.rgb
     var bgColor = currentMedia.palette?.darkMutedSwatch?.rgb
     if (bgColor == null) {
         bgColor = defaultBackdropColor.toArgb()
@@ -131,7 +155,7 @@ fun MediaPlayer(currentMedia: CurrentMedia, viewModel: MediaViewModel){
         Spacer(modifier = Modifier.height(90.dp))
         AlbumArt(data = currentMedia.artwork, isPlaying = currentMedia.playbackRate)
         Spacer(modifier = Modifier.height(40.dp))
-        MusicTitle(currentMedia.title, currentMedia.artist)
+        MusicTitle(currentMedia.title, currentMedia.artist, bottomSheetState = bottomSheetState)
         Spacer(modifier = Modifier.height(10.dp))
         ProgressBar(viewModel, totalTime = currentMedia.duration, elapsedTime = currentMedia.elapsed, deviceName = deviceName)
         Spacer(modifier = Modifier.height(15.dp))
@@ -170,19 +194,20 @@ fun ImagePlaceholder(data: Bitmap? = null, isPlaying: Boolean = false){
     }
 }
 
+
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
-fun MusicTitle(title:String, artist:String){
+fun MusicTitle(title:String, artist:String, bottomSheetState:ModalBottomSheetState){
     val boxHeight = 80.dp
-//    TODO: remove this context from here
-    val context = LocalContext.current
+    val modalScope = rememberCoroutineScope()
     Row (horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier){
         Box(modifier = Modifier
             .weight(0.75f)
             .height(boxHeight), contentAlignment = Alignment.CenterStart
         ) {
             Column {
-                Text(text = title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White, letterSpacing = 0.05.sp, overflow = TextOverflow.Ellipsis)
-                Text(text = artist, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = Color.LightGray)
+                Text(text = title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White, letterSpacing = 0.05.sp, overflow = TextOverflow.Ellipsis, maxLines = 1)
+                Text(text = artist, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = Color.LightGray, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         Box (modifier = Modifier
@@ -194,9 +219,9 @@ fun MusicTitle(title:String, artist:String){
                 .clip(CircleShape)
                 .background(color = Color(255, 255, 255, 60))
                 .clickable {
-                    val intent = Intent(context, BLEConnectionService::class.java)
-                    intent.action = BLEConnectionService.ACTIONS.STOP.toString()
-                    context.stopService(intent)
+                    modalScope.launch {
+                        bottomSheetState.show()
+                    }
                 }
             ){
                 Icon(
@@ -225,7 +250,7 @@ fun ProgressBar(viewModel: MediaViewModel, totalTime: Double, elapsedTime:Double
         Log.i("SeekSlider", elapsedTime.toString())
 //        Progress bar
         CustomSeekBar(targetValue = totalTime, currentValue = elapsedTime, modifier = Modifier.height(6.dp), onInteractionEnd = {}, onPositionChange ={newValue->
-            viewModel.updateElapsedTime(newValue)
+//            viewModel.updateElapsedTime(newValue)
 //            PacketManager.sendRemotePacket(RC.SEEK, newValue)
         } )
         Spacer(modifier = Modifier.height(10.dp))
@@ -432,5 +457,60 @@ fun CustomSeekBar(
                 .background(color = primaryColor)
                 .fillMaxWidth((progress.toFloat()))
         )
+    }
+}
+
+
+
+@OptIn(ExperimentalMaterialApi::class)
+@Composable
+fun MyModalBottomSheet(sheetState:ModalBottomSheetState, activity:Activity) {
+    val viewModel:MediaViewModel = viewModel()
+
+    ModalBottomSheetLayout(sheetState = sheetState,
+        sheetBackgroundColor = Color(30, 31, 34),
+        sheetShape = RoundedCornerShape(20.dp),
+        sheetContent = {
+        val context = LocalContext.current
+
+        Column(modifier = Modifier
+            .padding(16.dp)) {
+            ModalRow(Icons.Rounded.Refresh, "Refresh"){
+                NewServer.notifyWithResponse("REFRESH")
+                Toast.makeText(context, "Fetching data", Toast.LENGTH_SHORT).show()
+            }
+            ModalRow(Icons.Default.Info, "Advertise"){
+                if(!isLocationEnabled(context) && Build.VERSION.SDK_INT <= Build.VERSION_CODES.R){
+                    Toast.makeText(context, "Location is required for this app to run", Toast.LENGTH_SHORT).show()
+                    enableLocation(activity)
+                }
+                if (isLocationEnabled(context)){
+                    NewServer.startAdvertising()
+                }
+            }
+            ModalRow(Icons.Rounded.Close, "Disconnect"){
+                val intent = Intent(context, BLEConnectionService::class.java)
+                intent.action = BLEConnectionService.ACTIONS.STOP.toString()
+                context.stopService(intent)
+                Toast.makeText(context, "Device disconnected", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }){
+//        MediaPage()
+    }
+
+
+}
+
+@Composable
+fun ModalRow(imageVector: ImageVector, title: String,  onClick:()->Unit = {}){
+    Row(modifier = Modifier
+        .padding(10.dp)
+        .clickable {
+            onClick()
+        }) {
+        Icon(imageVector = imageVector, contentDescription = title)
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(text = title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.LightGray)
     }
 }

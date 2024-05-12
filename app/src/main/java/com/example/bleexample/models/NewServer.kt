@@ -34,6 +34,10 @@ object NewServer{
         bleServer?.stop()
     }
 
+    fun startAdvertising(){
+        bleServer?.startAdvertising()
+    }
+
     fun notifyWithResponse(message: String){
         val _message = "N$message"
         bleServer?.notifyResponse(_message)

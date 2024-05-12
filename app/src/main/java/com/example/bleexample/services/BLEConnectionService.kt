@@ -13,6 +13,7 @@ import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.example.bleexample.MainActivity
 import com.example.bleexample.R
 import com.example.bleexample.models.MediaDataStore
 import com.example.bleexample.models.NewServer
@@ -50,13 +51,15 @@ class BLEConnectionService:Service() {
     }
 
     override fun onDestroy() {
+        NewServer.notifyWithResponse("DESTROY")
         NewServer.stop()
         super.onDestroy()
         isServiceRunning = false
     }
 
-    fun updatePlaybackState(isPlaying: Boolean, totalDuration: Long, elapsedTime: Long, title:String) {
+    private fun updatePlaybackState(isPlaying: Boolean, totalDuration: Long, elapsedTime: Long) {
         Log.i("updatePlaybackState", "$isPlaying, $totalDuration, $elapsedTime")
+        val mediaState = MediaDataStore.mediaState
         val playbackStateBuilder = PlaybackStateCompat.Builder()
             .setActions(
                 PlaybackStateCompat.ACTION_PLAY or
@@ -74,7 +77,9 @@ class BLEConnectionService:Service() {
         mediaSessionCompat?.setPlaybackState(playbackStateBuilder.build())
 
         val metadataBuilder = MediaMetadataCompat.Builder()
-            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, mediaState.title)
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, mediaState.artist)
+            .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, mediaState.artwork)
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, totalDuration)
         mediaSessionCompat?.setMetadata(metadataBuilder.build())
     }
@@ -152,13 +157,17 @@ class BLEConnectionService:Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val openAppIntent = Intent(applicationContext, MainActivity::class.java)
+        val openAppPendingIntent = PendingIntent.getActivity(applicationContext, 0, openAppIntent, PendingIntent.FLAG_UPDATE_CURRENT)
 
         updatePlaybackState(
             isPlaying = MediaDataStore.mediaState.playbackRate,
             totalDuration = MediaDataStore.mediaState.duration.toLong()*1000,
             elapsedTime = MediaDataStore.mediaState.elapsed.toLong()*1000,
-            title = MediaDataStore.mediaState.title
         )
+
+
+
         mediaSessionCompat?.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
                 sendBroadcast(playIntent)
@@ -215,6 +224,7 @@ class BLEConnectionService:Service() {
                     .setShowActionsInCompactView(0, 1, 2)
                     .setMediaSession(mediaSessionCompat!!.sessionToken)
             )
+            .setContentIntent(openAppPendingIntent)
             .build()
     }
 

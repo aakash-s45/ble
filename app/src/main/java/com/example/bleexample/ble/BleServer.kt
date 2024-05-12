@@ -22,6 +22,8 @@ import com.example.bleexample.models.toData
 import com.example.bleexample.utils.myCharacteristicsUUID1
 import com.example.bleexample.utils.myCharacteristicsUUID2
 import com.example.bleexample.utils.myServiceUUID2
+import java.util.Timer
+import java.util.TimerTask
 
 class BleServer(private val app: Application, private val bluetoothManager: BluetoothManager){
     private var bluetoothAdapter: BluetoothAdapter = bluetoothManager.adapter
@@ -34,6 +36,8 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
 
     private var mediaData: MediaState? = null
     private var deviceName: String = ""
+
+    private var advertising: Boolean = false
 
 
     @SuppressLint("MissingPermission")
@@ -49,6 +53,7 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
         mediaData = MediaState()
     }
 
+
     @SuppressLint("MissingPermission")
     fun stop(){
         bleAdvertiser?.stop()
@@ -57,6 +62,22 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
             clearServices()
             close()
         }
+    }
+
+    fun startAdvertising(){
+        if (!advertising){
+            bleAdvertiser?.start()
+            var timer:Timer? = Timer()
+            timer?.schedule(object :TimerTask(){
+                override fun run() {
+                    bleAdvertiser?.stop()
+                    timer?.cancel()
+                    timer = null
+                    advertising = false
+                }
+            }, 30*1000)// 30 seconds
+        }
+
     }
 
 
@@ -103,6 +124,15 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
 
     private inner class GattServerCallback : BluetoothGattServerCallback() {
         @SuppressLint("MissingPermission")
+        private  fun verify_bond(device:BluetoothDevice){
+            if(device.bondState == BluetoothDevice.BOND_NONE){
+                val status = device.createBond()
+                if(!status){
+                    Log.d(TG, "Can't bond to device maybe it's already bonded")
+                }
+            }
+        }
+        @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             super.onConnectionStateChange(device, status, newState)
             val isSuccess = status == BluetoothGatt.GATT_SUCCESS
@@ -112,12 +142,15 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
                 "onConnectionStateChange: Server $device ${device.name} success: $isSuccess connected: $isConnected"
             )
             if (isSuccess && isConnected) {
+                verify_bond(device)
                 deviceName = device.name
 //                TODO: store this data somewhere else
                 MediaDataStore.updateData("",deviceName)
                 Log.d(TG, "Server connected to ${device.address}")
+
                 try {
                     bleDevice = device
+                    bleAdvertiser?.stop()
                 }
                 catch (e:Error){
                     bleDevice= null
@@ -140,8 +173,8 @@ class BleServer(private val app: Application, private val bluetoothManager: Blue
             value: ByteArray?
         ) {
             super.onCharacteristicWriteRequest(device, requestId, characteristic, preparedWrite, responseNeeded, offset, value)
+            verify_bond(device)
             if (characteristic.uuid == myCharacteristicsUUID1) {
-
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset,null)
                 if(value != null){
                     PacketManager.parse(value, deviceName)

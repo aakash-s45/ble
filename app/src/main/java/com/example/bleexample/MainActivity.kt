@@ -6,7 +6,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
@@ -30,8 +29,6 @@ import com.example.bleexample.screens.MediaPage
 import com.example.bleexample.services.BLEConnectionService
 import com.example.bleexample.ui.theme.BLEExampleTheme
 import com.example.bleexample.utils.askPermissions
-import com.example.bleexample.utils.enableLocation
-import com.example.bleexample.utils.isLocationEnabled
 import com.example.bleexample.utils.requiredPermissionsInitialClient
 
 const val TAG = "MainActivity"
@@ -89,10 +86,11 @@ class MainActivity : ComponentActivity() {
         if(!bluetoothAdapter.isEnabled){
             enableBluetooth()
         }
-        if(!isLocationEnabled(this) && Build.VERSION.SDK_INT <= Build.VERSION_CODES.R){
-            Toast.makeText(this, "Location is required for this app to run", Toast.LENGTH_SHORT).show()
-            enableLocation(this)
-        }
+//        TODO: block to ask for location permission
+//        if(!isLocationEnabled(this) && Build.VERSION.SDK_INT <= Build.VERSION_CODES.R){
+//            Toast.makeText(this, "Location is required for this app to run", Toast.LENGTH_SHORT).show()
+//            enableLocation(this)
+//        }
 
 //        check and ask for notification permission
         if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) {
@@ -118,7 +116,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MediaPage()
+                    MediaPage(activity = this)
 //                    Column (
 //                        verticalArrangement = Arrangement.Center,
 //                        horizontalAlignment = Alignment.CenterHorizontally,
