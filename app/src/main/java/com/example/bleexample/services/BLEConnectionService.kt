@@ -15,15 +15,24 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.example.bleexample.MainActivity
 import com.example.bleexample.R
-import com.example.bleexample.models.MediaDataStore
+import com.example.bleexample.models.AppRepository
+import com.example.bleexample.models.MediaData
 import com.example.bleexample.models.NewServer
+import com.example.bleexample.models.PacketManager
 import com.example.bleexample.receivers.BLEConnectionReceiver
+import com.example.bleexample.utils.defaultMediaData
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
-
+@AndroidEntryPoint
 class BLEConnectionService:Service() {
     private var notificationCompatManager: NotificationManagerCompat? = null
     private var mediaSessionCompat: MediaSessionCompat? = null
     private var isServiceRunning = false
+
+    @Inject
+    lateinit var repository: AppRepository
+    var mediaData:MediaData = defaultMediaData
     override fun onBind(intent: Intent?): IBinder? {
         return null
     }
@@ -40,7 +49,7 @@ class BLEConnectionService:Service() {
                     stopSelf()
                 }
                 ACTIONS.UPDATE.toString() -> {
-                    Log.i("BLEService", MediaDataStore.mediaState.title)
+                    Log.i("BLEService", repository.mediaData.value?.toString()?:"No data")
 //                    TODO: update notification here
                     updateNotification()
                 }
@@ -51,15 +60,27 @@ class BLEConnectionService:Service() {
     }
 
     override fun onDestroy() {
-        NewServer.notifyWithResponse("DESTROY")
+        NewServer.instruct("TASK","DESTROY")
         NewServer.stop()
         super.onDestroy()
         isServiceRunning = false
     }
 
+    private fun onStart() {
+        PacketManager.setAppContext(application)
+        if(isServiceRunning){
+            return
+        }
+        notificationCompatManager = NotificationManagerCompat.from(applicationContext)
+        mediaSessionCompat = MediaSessionCompat(applicationContext, "tag")
+        val notification = showNotification()
+        startForeground(1, notification)
+        isServiceRunning = true
+        NewServer.start(application)
+    }
+
+
     private fun updatePlaybackState(isPlaying: Boolean, totalDuration: Long, elapsedTime: Long) {
-        Log.i("updatePlaybackState", "$isPlaying, $totalDuration, $elapsedTime")
-        val mediaState = MediaDataStore.mediaState
         val playbackStateBuilder = PlaybackStateCompat.Builder()
             .setActions(
                 PlaybackStateCompat.ACTION_PLAY or
@@ -77,37 +98,26 @@ class BLEConnectionService:Service() {
         mediaSessionCompat?.setPlaybackState(playbackStateBuilder.build())
 
         val metadataBuilder = MediaMetadataCompat.Builder()
-            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, mediaState.title)
-            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, mediaState.artist)
-            .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, mediaState.artwork)
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, mediaData.title)
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, mediaData.artist)
+            .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, mediaData.artwork)
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, totalDuration)
         mediaSessionCompat?.setMetadata(metadataBuilder.build())
     }
 
 
-    fun onStart() {
-        MediaDataStore.setAppContext(application)
-        if(isServiceRunning){
-            return
-        }
-        notificationCompatManager = NotificationManagerCompat.from(applicationContext)
-        mediaSessionCompat = MediaSessionCompat(applicationContext, "tag")
-        val notification = showNotification()
-        startForeground(1, notification)
-        isServiceRunning = true
-        NewServer.start(application)
-    }
-
     private fun updateNotification(){
+        if(repository.mediaData.value == null)return
         val notification = showNotification()
         notificationCompatManager?.notify(1,notification)
     }
 
     private fun showNotification(): Notification {
-        val image: Bitmap? = MediaDataStore.mediaState.artwork
-        val title = MediaDataStore.mediaState.title
-        val artist = MediaDataStore.mediaState.artist
-        mediaSessionCompat?.isActive = MediaDataStore.mediaState.playbackRate
+        mediaData = repository.mediaData.value ?: defaultMediaData
+        val image: Bitmap? = mediaData.artwork
+        val title = mediaData.title
+        val artist = mediaData.artist
+        mediaSessionCompat?.isActive = mediaData.playbackRate
 
         val playIntent = Intent(applicationContext, BLEConnectionReceiver::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -161,9 +171,9 @@ class BLEConnectionService:Service() {
         val openAppPendingIntent = PendingIntent.getActivity(applicationContext, 0, openAppIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         updatePlaybackState(
-            isPlaying = MediaDataStore.mediaState.playbackRate,
-            totalDuration = MediaDataStore.mediaState.duration.toLong()*1000,
-            elapsedTime = MediaDataStore.mediaState.elapsed.toLong()*1000,
+            isPlaying = mediaData.playbackRate,
+            totalDuration = mediaData.duration.toLong()*1000,
+            elapsedTime = mediaData.elapsed.toLong()*1000,
         )
 
 
@@ -193,14 +203,14 @@ class BLEConnectionService:Service() {
         val nextImage = R.drawable.ic_media_next
         var previousImage = R.drawable.ic_media_previous
 
-        val playPausePendingIntent = if(MediaDataStore.mediaState.playbackRate){
+        val playPausePendingIntent = if(mediaData.playbackRate){
             pausePendingIntent
         }
         else{
             playPendingIntent
         }
 
-        val centerAction =  if (MediaDataStore.mediaState.playbackRate){
+        val centerAction =  if (mediaData.playbackRate){
             R.drawable.ic_media_pause
         }
         else{
@@ -227,7 +237,6 @@ class BLEConnectionService:Service() {
             .setContentIntent(openAppPendingIntent)
             .build()
     }
-
 
 
     enum class ACTIONS {

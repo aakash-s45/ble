@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+package com.example.bleexample;
+
+enum MessageType {
+  CLIPBOARD = 0;
+  GRAPHICS = 1;
+  MEDIADATA = 2;
+  METADATA = 3;
+  NOTIFICATION = 4;
+  REMOTE = 5;
+}
+
+message ClipBoard{
+  string text = 1;
+  string timestamp = 2;
+  string origin = 3;
+}
+
+message Graphic{
+  bytes data = 1;
+  int32 seq = 2;
+}
+
+message MetaData{
+  int32 size = 1;
+  string type = 2;
+  bytes extraData = 3;
+}
+
+message MediaData{
+  bool playbackRate = 1;
+  double duration = 2;
+  double elapsed = 3;
+  float volume = 4;
+  string album = 5;
+  string artist = 6;
+  string bundle = 7;
+  string title = 8;
+  int32 artworkSize = 9;
+  google.protobuf.Timestamp timestamp = 10;
+}
+
+message NotificationData{
+  string appName = 1;
+  string body = 2;
+  string profile = 3;
+  string title = 4;
+}
+
+message RemoteData{
+  string event = 1;
+  string extraData = 2;
+}
+
+message BPacket{
+  MessageType type = 1;
+
+  oneof data {
+    ClipBoard clipboard = 2;
+    Graphic graphic = 3;
+    MediaData mediaData = 4;
+    NotificationData notificationData = 5;
+    RemoteData remoteData = 6;
+    MetaData metadata = 7;
+  }
+}

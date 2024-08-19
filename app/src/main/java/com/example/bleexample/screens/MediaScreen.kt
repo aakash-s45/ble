@@ -41,8 +41,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -67,14 +67,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.bleexample.R
-import com.example.bleexample.models.CurrentMedia
-import com.example.bleexample.models.MediaViewModel
+import com.example.bleexample.models.AppViewModel
+import com.example.bleexample.models.MediaData
 import com.example.bleexample.models.NewServer
 import com.example.bleexample.models.PacketManager
 import com.example.bleexample.models.RC
 import com.example.bleexample.services.BLEConnectionService
+import com.example.bleexample.utils.defaultBackdropColor
 import com.example.bleexample.utils.enableLocation
 import com.example.bleexample.utils.isLocationEnabled
 import kotlinx.coroutines.launch
@@ -94,31 +95,33 @@ fun bytesToHex(bytes: ByteArray): String {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun MediaPage(activity: Activity) {
-    val viewModel: MediaViewModel = viewModel()
-    val currentMedia by viewModel.mediaState.collectAsState()
     val sheetState = rememberModalBottomSheetState(
         initialValue = ModalBottomSheetValue.Hidden
     )
-    val modalScope = rememberCoroutineScope()
     Log.i("MediaPage", "Updated media page")
-    MediaPlayer(currentMedia = currentMedia, bottomSheetState = sheetState)
+    MediaPlayer(bottomSheetState = sheetState)
     MyModalBottomSheet(sheetState = sheetState, activity = activity)
-
 }
+
+
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
-fun MediaPlayer(currentMedia: CurrentMedia, bottomSheetState: ModalBottomSheetState){
+fun MediaPlayer( bottomSheetState: ModalBottomSheetState){
 //    Background
-    val viewModel:MediaViewModel = viewModel()
+    val viewModel: AppViewModel = hiltViewModel()
+    val currentMedia by viewModel.mediaData.observeAsState()
+    if(currentMedia==null){
+        Text("No Data")
+        return
+    }
+
     val scrrenPadding = 25.dp
-    Log.i("Playbackrate", currentMedia.toString())
-    var isPlaying by remember { mutableStateOf(currentMedia.playbackRate) }
 
 
-    val defaultBackdropColor =Color(53, 23, 23, 255)
-//    var bgColor = currentMedia.palette?.darkVibrantSwatch?.rgb
-    var bgColor = currentMedia.palette?.darkMutedSwatch?.rgb
+//    var bgColor = currentMedia!!.palette?.darkMutedSwatch?.rgb
+    var bgColor = currentMedia!!.palette?.darkVibrantSwatch?.rgb
+
     if (bgColor == null) {
         bgColor = defaultBackdropColor.toArgb()
     }
@@ -127,11 +130,11 @@ fun MediaPlayer(currentMedia: CurrentMedia, bottomSheetState: ModalBottomSheetSt
         0.4f to Color(bgColor),
         1f to Color(0, 0, 0, 200)
     )
-    val deviceName = if(currentMedia.bundle.isNotEmpty()){
-        "${currentMedia.deviceName} | ${currentMedia.bundle}"
+    val deviceName = if(currentMedia!!.bundle.isNotEmpty()){
+        "${currentMedia?.deviceName} | ${currentMedia?.bundle}"
     }
     else{
-        currentMedia.deviceName
+        currentMedia!!.deviceName
     }
     if (!view.isInEditMode) {
         SideEffect {
@@ -153,23 +156,23 @@ fun MediaPlayer(currentMedia: CurrentMedia, bottomSheetState: ModalBottomSheetSt
         .fillMaxSize()
         .padding(scrrenPadding, 0.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(modifier = Modifier.height(90.dp))
-        AlbumArt(data = currentMedia.artwork, isPlaying = currentMedia.playbackRate)
+        AlbumArt(data = currentMedia!!.artwork, isPlaying = currentMedia!!.playbackRate)
         Spacer(modifier = Modifier.height(40.dp))
-        MusicTitle(currentMedia.title, currentMedia.artist, bottomSheetState = bottomSheetState)
+        MusicTitle(currentMedia!!.title, currentMedia!!.artist, bottomSheetState = bottomSheetState)
         Spacer(modifier = Modifier.height(10.dp))
-        ProgressBar(viewModel, totalTime = currentMedia.duration, elapsedTime = currentMedia.elapsed, deviceName = deviceName)
+        ProgressBar(viewModel, totalTime = currentMedia!!.duration, elapsedTime = currentMedia!!.elapsed, deviceName = deviceName)
         Spacer(modifier = Modifier.height(15.dp))
-        PlayerButtons(currentMedia) {
+        PlayerButtons(currentMedia!!) {
             viewModel.togglePlayPause()
         }
         Spacer(modifier = Modifier.height(18.dp))
-        VolumeController((currentMedia.volume*100).toDouble(), color = Color(194, 192, 192, 255), viewModel = viewModel)
+        VolumeController((currentMedia!!.volume*100).toDouble(), color = Color(194, 192, 192, 255), viewModel = viewModel)
     }
 }
 
 @Composable
 fun AlbumArt(data:Bitmap? = null, isPlaying: Boolean = false){
-    Log.i("AlbumArtImage", data.toString())
+//    Log.i("AlbumArtImage", data.toString())
     ImagePlaceholder(data, isPlaying = isPlaying)
 }
 
@@ -240,15 +243,12 @@ fun MusicTitle(title:String, artist:String, bottomSheetState:ModalBottomSheetSta
 
 
 @Composable
-fun ProgressBar(viewModel: MediaViewModel, totalTime: Double, elapsedTime:Double, deviceName:String = ""){
+fun ProgressBar(viewModel: AppViewModel, totalTime: Double, elapsedTime:Double, deviceName:String = ""){
     val isTotalTimeEnabled = true
     val backgroundColor = Color(230, 230, 230, 96)
 
 //    elapsedTime1 = elapsedTime
     Column {
-        Log.i("SeekSlider", totalTime.toString())
-        Log.i("SeekSlider", elapsedTime.toString())
-//        Progress bar
         CustomSeekBar(targetValue = totalTime, currentValue = elapsedTime, modifier = Modifier.height(6.dp), onInteractionEnd = {}, onPositionChange ={newValue->
 //            viewModel.updateElapsedTime(newValue)
 //            PacketManager.sendRemotePacket(RC.SEEK, newValue)
@@ -272,7 +272,6 @@ fun ProgressBar(viewModel: MediaViewModel, totalTime: Double, elapsedTime:Double
         }
     }
 }
-
 
 @Composable
 fun CurrentDevice(currentDevice: String, fontSize:TextUnit, color: Color){
@@ -301,7 +300,7 @@ fun convertSecondsToTime(seconds: Double): String {
 }
 
 @Composable
-fun PlayerButtons(currentMedia: CurrentMedia, toggle: ()->Unit){
+fun PlayerButtons(currentMedia: MediaData, toggle: ()->Unit){
     val tint = Color.White
     val buttonSize = 40.dp
     val centerImageId = if( currentMedia.playbackRate) R.drawable.pause else  R.drawable.play
@@ -347,10 +346,7 @@ fun PlayerButtons(currentMedia: CurrentMedia, toggle: ()->Unit){
 
 
 @Composable
-fun VolumeController(volume:Double, viewModel: MediaViewModel, color:Color = Color.White){
-//    var currentVolume by remember {
-//        mutableStateOf(volume)
-//    }
+fun VolumeController(volume:Double, viewModel: AppViewModel, color:Color = Color.White){
     Row(modifier = Modifier
         .padding(40.dp,0.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -465,7 +461,7 @@ fun CustomSeekBar(
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun MyModalBottomSheet(sheetState:ModalBottomSheetState, activity:Activity) {
-    val viewModel:MediaViewModel = viewModel()
+    val viewModel:AppViewModel = hiltViewModel()
 
     ModalBottomSheetLayout(sheetState = sheetState,
         sheetBackgroundColor = Color(30, 31, 34),
@@ -476,7 +472,7 @@ fun MyModalBottomSheet(sheetState:ModalBottomSheetState, activity:Activity) {
         Column(modifier = Modifier
             .padding(16.dp)) {
             ModalRow(Icons.Rounded.Refresh, "Refresh"){
-                NewServer.notifyWithResponse("REFRESH")
+                NewServer.instruct("TASK","REFRESH")
                 Toast.makeText(context, "Fetching data", Toast.LENGTH_SHORT).show()
             }
             ModalRow(Icons.Default.Info, "Advertise"){
@@ -485,7 +481,7 @@ fun MyModalBottomSheet(sheetState:ModalBottomSheetState, activity:Activity) {
                     enableLocation(activity)
                 }
                 if (isLocationEnabled(context)){
-                    NewServer.startAdvertising()
+                    NewServer.startDiscovery()
                 }
             }
             ModalRow(Icons.Rounded.Close, "Disconnect"){

@@ -1,48 +1,41 @@
 package com.example.bleexample.models
 
 import android.app.Application
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothManager
 import android.util.Log
-import com.example.bleexample.ble.BleServer
+import com.example.bleexample.Message
+import com.example.bleexample.bluetoothClassic.RFCommServer
 
 
 const val TG = "NewBLEServer"
 object NewServer{
-    private var app:Application? = null
-    private lateinit var bluetoothManager: BluetoothManager
-    private lateinit var bluetoothAdapter: BluetoothAdapter
+    private var rfCommServer: RFCommServer? = null
 
-    private var bleServer: BleServer? = null
-    private  var count = 0
-
-
-    fun start(app:Application){
-        bluetoothManager = app.getSystemService(BluetoothManager::class.java)
-        bluetoothAdapter = bluetoothManager.adapter
-        if(bluetoothAdapter.isEnabled){
-            Log.d(TG,"bluetoothAdapter.isEnabled: true")
-            bleServer = BleServer(app, bluetoothManager)
-            bleServer?.start()
-        }
-        else{
-            Log.d(TG,"bluetoothAdapter.isEnabled: false")
-        }
+    fun start(application: Application){
+        rfCommServer = RFCommServer(application)
+        rfCommServer?.startListening()
     }
 
     fun stop(){
-        bleServer?.stop()
+        rfCommServer?.stop()
     }
 
-    fun startAdvertising(){
-        bleServer?.startAdvertising()
+    fun startDiscovery(){
+        rfCommServer?.enableDiscoverability()
     }
 
-    fun notifyWithResponse(message: String){
-        val _message = "N$message"
-        bleServer?.notifyResponse(_message)
+    fun instruct(event:String, extraData:String? = ""){
+        Log.i(TG, "event in instruct: ${event}, ${extraData}")
+        val message = Message.BPacket.newBuilder()
+            .setType(Message.MessageType.REMOTE)
+            .setRemoteData(
+                Message.RemoteData.newBuilder()
+                .setEvent(event)
+                .setExtraData(extraData)
+            )
+            .build()
+        Log.i(TG, "Sending remote message: $message")
+        rfCommServer?.writeData(message.toByteArray())
     }
-
 }
 
 

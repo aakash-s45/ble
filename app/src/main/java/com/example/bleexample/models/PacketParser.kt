@@ -1,7 +1,13 @@
 package com.example.bleexample.models
 
+import android.app.Application
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.util.Log
+import com.example.bleexample.Message
+import com.example.bleexample.bluetoothClassic.RFTAG
+import com.example.bleexample.services.BLEConnectionService
+import com.google.protobuf.ByteString
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.time.Duration
@@ -36,17 +42,16 @@ fun BPacket.toData(): ByteArray {
 }
 
 
+object PacketManager {
 
-
-object PacketManager{
-     private const val INIT:Char = 'I'
+    private const val INIT:Char = 'I'
     private const val GRAPHICS:Char = 'G'
     private const val METADATA:Char = 'M'
     private const val REMOTE:Char = 'R'
     private const val ACCESS:Char = 'A'
 
 
-    private var buffer =  mutableMapOf<Int, ByteArray>()
+    private var buffer =  mutableMapOf<Int, ByteString>()
     private var totalPackets = 0
     private var connectionState:ConnectionState = ConnectionState.IDLE
     private var nextPakcetSeq = -1
@@ -56,107 +61,114 @@ object PacketManager{
     private var accessKey:String? = null
     private var lastNotificationInstant:Instant? = null
     private var rateLimit = 500L
+    private  var viewModel:AppViewModel? = null
+    private lateinit var application: Application
 
     init {
         lastNotificationInstant = Instant.now()
     }
 
-     fun parse(byteArray: ByteArray, deviceName: String = ""){
-        if (byteArray.size < 5) {
-            Log.i("Delegator", "Not enough bytes to parse")
-            // Not enough bytes to parse
-            return
-        }
+    fun setViewModel(viewModel: AppViewModel){
+        this.viewModel = viewModel
+    }
 
-        val type = byteArray[0].toInt().toChar()
-        val seqBytes = byteArray.sliceArray(1 until 5)
-        val seq = ((seqBytes[0].toInt() and 0xFF) shl 24) or
-                ((seqBytes[1].toInt() and 0xFF) shl 16) or
-                ((seqBytes[2].toInt() and 0xFF) shl 8) or
-                (seqBytes[3].toInt() and 0xFF)
-        val data = byteArray.sliceArray(5 until byteArray.size)
-         Log.i("PacketParse", type.toString())
-        packetDelegator(BPacket(type, seq, data), deviceName )
+    fun setAppContext(app: Application){
+        this.application = app
+    }
+
+    fun notifyService(){
+        val intent = Intent(application, BLEConnectionService::class.java)
+        intent.action = BLEConnectionService.ACTIONS.UPDATE.toString()
+        application.startService(intent)
     }
 
 
-    fun packetDelegator(packet: BPacket, deviceName: String = ""){
+    fun packetDelegator(packet: Message.BPacket, deviceName: String? = ""){
+
+        Log.i(TG, "Packet type: ${packet.type}")
         when(packet.type){
-            INIT -> handleInitPacket(packet)
-            GRAPHICS -> handleGraphicsData(packet)
-            METADATA -> handleMetaData(packet, deviceName)
-            REMOTE -> handleRemoteEvents(packet)
-            ACCESS -> handleAccessKeyPacket(packet)
+            Message.MessageType.CLIPBOARD -> handleClipboardData(packet.clipboard)
+            Message.MessageType.GRAPHICS -> handleGraphicsData(packet.graphic)
+            Message.MessageType.MEDIADATA -> handleMediaData(packet.mediaData,deviceName)
+            Message.MessageType.METADATA -> handleInitPacket(packet.metadata)
+            Message.MessageType.REMOTE -> handleRemoteEvents(packet.remoteData)
+            else -> {
+                Log.e(TG, "Couldn't process the packet: $packet")
+            }
         }
+    }
+
+    fun handleClipboardData(data: Message.ClipBoard, deviceName: String = ""){
 
     }
 
-    fun handleAccessKeyPacket(packet: BPacket){
-        this.accessKey = packet.data.toString(Charsets.UTF_8)
+
+    fun handleMediaData(data: Message.MediaData,  deviceName: String? = ""){
+        Log.d("handleMetaData", data.toString())
+        val _deviceName = deviceName ?: ""
+        viewModel?.updateMediaData(data, _deviceName)
+        notifyService()
     }
 
-    fun handleMetaData(packet: BPacket, deviceName: String = ""){
-        val data = packet.data.toString(Charsets.UTF_8)
-        Log.d("handleMetaData", data)
-        MediaDataStore.updateData(data, deviceName)
-    }
 
-    fun handleRemoteEvents(packet: BPacket){
+    fun handleRemoteEvents(data: Message.RemoteData){
 
 
     }
-    fun handleGraphicsData(packet: BPacket){
+    fun handleGraphicsData(data: Message.Graphic){
         if (method == "fast"){
-            handleGraphicsDataFast(packet)
+            handleGraphicsDataFast(data)
             return
         }
 //        TODO: add time thing also
-        Log.i("handleGraphicsData", packet.seq.toString())
-        if(packet.seq == this.nextPakcetSeq){
-            buffer[packet.seq] = packet.data
-            nextPakcetSeq = packet.seq + 1
+        Log.i("handleGraphicsData", data.seq.toString())
+        if(data.seq == this.nextPakcetSeq){
+            buffer[data.seq] = data.data
+            nextPakcetSeq = data.seq + 1
         }
         if(nextPakcetSeq == totalPackets){
             val combinedByteArray = ByteArrayOutputStream().apply {
-                buffer.values.forEach { write(it) }
+                buffer.values.forEach {
+                    write(it.toByteArray())
+                }
             }.toByteArray()
             val bitmap = BitmapFactory.decodeByteArray(combinedByteArray, 0, combinedByteArray.size)
-            MediaDataStore.updateArtwork(bitmap)
+            viewModel?.updateArtwork(bitmap)
         }
         else{
-            NewServer.notifyWithResponse("ACK:${nextPakcetSeq}")
+            NewServer.instruct("TASK","ACK:${nextPakcetSeq}")
         }
     }
 
-    fun handleGraphicsDataFast(packet: BPacket){
+    fun handleGraphicsDataFast(data: Message.Graphic){
+        Log.i(RFTAG, "PACKET ${data.seq} SIZE: ${data.data.size()}")
 //        TODO: add time thing also
-        Log.i("handleGraphicsDataFast", packet.seq.toString())
-        if(packet.data.isNotEmpty()){
-            buffer[packet.seq] = packet.data
+        Log.i("handleGraphicsDataFast", data.seq.toString())
+        if(!data.data.isEmpty){
+            buffer[data.seq] = data.data
         }
-        if(packet.seq + 1 == totalPackets && buffer.size == totalPackets){
+        if(data.seq + 1 == totalPackets && buffer.size == totalPackets){
             val combinedByteArray = ByteArrayOutputStream().apply {
-                buffer.values.forEach { write(it) }
+                buffer.values.forEach { write(it.toByteArray()) }
             }.toByteArray()
             val bitmap = BitmapFactory.decodeByteArray(combinedByteArray, 0, combinedByteArray.size)
-            MediaDataStore.updateArtwork(bitmap)
+            viewModel?.updateArtwork(bitmap)
         }
-        else if(packet.seq + 1 == totalPackets && buffer.size != totalPackets){
+        else if(data.seq + 1 == totalPackets && buffer.size != totalPackets){
             Log.e("handleGraphicsDataFast", "Maybe some error has occurred, use reliable method")
-            Log.e("handleGraphicsDataFast", "seq: ${packet.seq}, totalPackets:$totalPackets, buffer.size:${buffer.size}")
+            Log.e("handleGraphicsDataFast", "seq: ${data.seq}, totalPackets:$totalPackets, buffer.size:${buffer.size}")
         }
     }
 
-    fun handleInitPacket(packet: BPacket){
-        Log.d("handleInitPacket", packet.seq.toString())
-        Log.d("NewInitPacket", packet.data.decodeToString())
-        method = packet.data.decodeToString()
+    private fun handleInitPacket(data: Message.MetaData){
+        Log.d("handleInitPacket", data.size.toString())
+        Log.d("NewInitPacket", data.type)
+        method = data.type
         buffer.clear()
-        totalPackets = packet.seq
+        totalPackets = data.size
         connectionState = ConnectionState.IDLE
         nextPakcetSeq = 0
-        NewServer.notifyWithResponse("ACK:0")
-//        setup receiving
+        NewServer.instruct("TASK","ACK:0")
     }
 
     fun sendRemotePacket(control:RC, seekValue:Double? = null, insecure:Boolean = true){
@@ -165,66 +177,59 @@ object PacketManager{
             return
         }
 
-        var _packet:BPacket? = null
-        _packet = when(control){
+        var command:String? = null
+        command = when(control){
             RC.PLAY -> {
-                MediaDataStore.updateVolume()
-                BPacket('R',1, "PLAY".toByteArray())
+//                MediaDataStore.updateVolume()
+//                NewServer.instruct("PLAY")
+                "PLAY"
             }
 
             RC.NEXT -> {
-                BPacket('R',1, "NEXT".toByteArray())
+                "NEXT"
             }
 
             RC.PREV -> {
-                BPacket('R',1, "PREV".toByteArray())
+                "PREV"
             }
 
             RC.VOL_PLUS -> {
-                BPacket('R',1, "VFULL".toByteArray())
+                "VFULL"
             }
 
             RC.VOL_MIN -> {
-                BPacket('R',1, "VMUTE".toByteArray())
+                "VMUTE"
             }
 
             RC.VOL_INC -> {
-                MediaDataStore.updateVolume(change = 0.0625f)
-                BPacket('R',1, "VINC".toByteArray())
+//                TODO: update this
+//                MediaDataStore.updateVolume(change = 0.0625f)
+                "VINC"
             }
 
             RC.VOL_DEC -> {
-                MediaDataStore.updateVolume(change = -0.0625f)
-                BPacket('R',1, "VDEC".toByteArray())
+//                MediaDataStore.updateVolume(change = -0.0625f)
+                "VDEC"
             }
 
 
             RC.SEEK -> {
-                BPacket('R',2, "SEEKM:$seekValue".toByteArray())
+                "SEEKM:$seekValue"
             }
 
             RC.SEEK_VOL -> {
-                BPacket('R',2, "SEEKV:$seekValue".toByteArray())
+                "SEEKV:$seekValue"
             }
         }
         if (remotePacket != null && remotePacketReadCount > 0) {
             remotePacketReadCount-=1
             return
         }
-        if (_packet == null){
-            Log.i("REMOTEControl", "No packet to send")
-            return
-        }
         if (remotePacket != null && remotePacketReadCount == 0) {
             remotePacketReadCount = 3
         }
 
-        remotePacket = _packet
-        NewServer.notifyWithResponse("READ")
-
-//        set the value in the variable if null (3 times only)
-//
-//        read request complete, set null
+        NewServer.instruct("CMD", extraData = command)
     }
 
     private fun sendRemotePacketInsecure(control:RC, seekValue:Double? = null){
@@ -251,12 +256,12 @@ object PacketManager{
             }
 
             RC.VOL_INC -> {
-                MediaDataStore.updateVolume(change = 0.0625f)
+//                MediaDataStore.updateVolume(change = 0.0625f)
                 "VINC"
             }
 
             RC.VOL_DEC -> {
-                MediaDataStore.updateVolume(change = -0.0625f)
+//                MediaDataStore.updateVolume(change = -0.0625f)
                 "VDEC"
             }
 
@@ -269,13 +274,9 @@ object PacketManager{
                 "SEEKV:$seekValue"
             }
         }
-        if (notification_message != null && Duration.between(lastNotificationInstant, Instant.now()).toMillis() > rateLimit){
-            NewServer.notifyWithResponse("REMOTE:$notification_message")
+        if (Duration.between(lastNotificationInstant, Instant.now()).toMillis() > rateLimit){
+            NewServer.instruct("CMD","${notification_message}")
             lastNotificationInstant = Instant.now()
-
         }
-
     }
-
-
 }
