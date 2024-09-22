@@ -79,16 +79,25 @@ class AppRepository @Inject constructor() {
     fun updateVolume(volume: Float? = null, change: Float = 0.0f) {
         _mediaData.value?.let {
             val newVolume = volume ?: (it.volume + change)
+            PacketManager.sendRemotePacket(RC.SEEK_VOL, newVolume.toDouble())
             updateData(it.copy(volume = newVolume))
         }
     }
-
 
     fun togglePlayPause() {
         _mediaData.value?.let {
             val newPlaybackRate = !it.playbackRate
             updateData(it.copy(playbackRate = newPlaybackRate))
         }
+        PacketManager.sendRemotePacket(RC.PLAY)
+    }
+
+    fun nextMedia(){
+        PacketManager.sendRemotePacket(RC.NEXT)
+    }
+
+    fun previousMedia(){
+        PacketManager.sendRemotePacket(RC.PREV)
     }
 
     private fun updatePalette(bitmap: Bitmap){
@@ -132,14 +141,31 @@ class AppRepository @Inject constructor() {
         }
     }
 
+    fun setElapsed(value: Double){
+        _mediaData.value?.let {
+            updateData(it.copy(elapsed = value))
+        }
+    }
+
+    fun setElapsedTimerOnRemote(){
+        _mediaData.value?.let {
+            PacketManager.sendRemotePacket(RC.SEEK, it.elapsed)
+        }
+    }
 }
 
 @HiltViewModel
-class AppViewModel @Inject constructor(private  val repository: AppRepository): ViewModel(){
+class AppViewModel @Inject constructor(private  val repository: AppRepository, private val clipboardHandler: ClipboardHandler): ViewModel(){
     val mediaData: LiveData<MediaData> = repository.mediaData
     private var timerJob: Job? = null
+
     init {
-        repository.resetToDefault()
+        if(repository.mediaData.value==null){
+            repository.resetToDefault()
+        }
+        else{
+            updateElapsedTimer()
+        }
     }
 
     private fun updatePalette(bitmap: Bitmap){
@@ -149,6 +175,14 @@ class AppViewModel @Inject constructor(private  val repository: AppRepository): 
                 repository.updateMediaDataByKey("palette", palette)
             }
         }
+    }
+
+    fun updateClipboardData(data: Message.ClipBoard, deviceName: String?){
+        clipboardHandler.addDataToClipboard(data.text, data.origin, deviceName)
+    }
+
+    fun checkClipboard(){
+        clipboardHandler.checkClipboard()
     }
 
     fun updateArtwork(artwork: Bitmap?){
@@ -165,6 +199,14 @@ class AppViewModel @Inject constructor(private  val repository: AppRepository): 
         repository.togglePlayPause()
     }
 
+    fun next(){
+        repository.nextMedia()
+    }
+
+    fun previous(){
+        repository.previousMedia()
+    }
+
     fun updateVolume(volume:Double? = null, change: Float = 0.0f){
         if (volume != null) {
             repository.updateVolume(volume.toFloat())
@@ -174,12 +216,13 @@ class AppViewModel @Inject constructor(private  val repository: AppRepository): 
         }
     }
 
+
     fun updateMediaData(data: Message.MediaData, deviceName:String = ""){
         repository.setMediaData(data, deviceName)
         updateElapsedTimer()
     }
 
-    fun updateElapsedTimer(){
+    private fun updateElapsedTimer(){
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
             while (mediaData.value!!.elapsed < mediaData.value!!.duration){
@@ -188,4 +231,15 @@ class AppViewModel @Inject constructor(private  val repository: AppRepository): 
             }
         }
     }
+
+    fun setElapsedTimer(value:Double){
+        repository.setElapsed(value)
+//        updateElapsedTimer()
+    }
+
+
+    fun setElapsedTimerOnRemote(){
+        repository.setElapsedTimerOnRemote()
+    }
+
 }

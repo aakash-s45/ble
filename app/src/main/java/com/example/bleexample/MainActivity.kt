@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.example.bleexample.models.AppRepository
 import com.example.bleexample.models.AppViewModel
 import com.example.bleexample.models.PacketManager
 import com.example.bleexample.models.RC
@@ -28,6 +29,7 @@ import com.example.bleexample.ui.theme.BLEExampleTheme
 import com.example.bleexample.utils.askPermissions
 import com.example.bleexample.utils.requiredPermissionsInitialClient
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 const val TAG = "MainActivity"
 
@@ -35,6 +37,8 @@ const val TAG = "MainActivity"
 class MainActivity : ComponentActivity() {
     lateinit var bluetoothAdapter:BluetoothAdapter
     private val appViewModel by viewModels<AppViewModel>()
+    @Inject
+    lateinit var repository:AppRepository
 
     private val multiplePermissionLauncher =
             registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
@@ -71,6 +75,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         Log.i("onStart", "starting")
+        Log.i("onStart", "repository value: ${repository.mediaData.value.toString()}")
         val intent = Intent(applicationContext, BLEConnectionService::class.java)
         intent.action = BLEConnectionService.ACTIONS.START.toString()
         applicationContext.startService(intent)

@@ -3,11 +3,15 @@ package com.example.bleexample.utils
 import android.Manifest
 import android.os.Build
 import androidx.compose.ui.graphics.Color
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.example.bleexample.models.MediaData
 import java.util.UUID
 
 
 val uuidBTClassic: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+const val PREFERENCES_NAME = "passover_preferences"
+val WEBHOOK_URL_KEY = stringPreferencesKey("passover_webhook_url")
+
 
 val myServiceUUID1: UUID = UUID.fromString("0000b81d-0000-1000-8000-00805f9b34fb")
 val myServiceUUID2: UUID = UUID.fromString("15006156-c8fa-4ae8-9c73-2ad4c2d1a850")

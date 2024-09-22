@@ -62,15 +62,16 @@ class BLEConnectionService:Service() {
     override fun onDestroy() {
         NewServer.instruct("TASK","DESTROY")
         NewServer.stop()
+        PacketManager
         super.onDestroy()
         isServiceRunning = false
     }
 
     private fun onStart() {
-        PacketManager.setAppContext(application)
         if(isServiceRunning){
             return
         }
+        PacketManager.setAppContext(application)
         notificationCompatManager = NotificationManagerCompat.from(applicationContext)
         mediaSessionCompat = MediaSessionCompat(applicationContext, "tag")
         val notification = showNotification()
@@ -107,17 +108,39 @@ class BLEConnectionService:Service() {
 
 
     private fun updateNotification(){
-        if(repository.mediaData.value == null)return
+        if(repository.mediaData.value == null){
+//            Log.i("BLEService", "UpDATE notification")
+            return
+        }
         val notification = showNotification()
         notificationCompatManager?.notify(1,notification)
     }
 
+    private fun defaultNotification(openAppPendingIntent: PendingIntent):Notification{
+        return NotificationCompat.Builder(applicationContext, "ble_sync_channel")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("Passover")
+            .setContentText("Running")
+            .setOnlyAlertOnce(true)
+            .setColor(resources.getColor(R.color.black))
+            .setContentIntent(openAppPendingIntent)
+            .build()
+    }
+
     private fun showNotification(): Notification {
+//        Log.i("BLEService", "showing notification with data:${repository.mediaData.value}")
+        val openAppIntent = Intent(applicationContext, MainActivity::class.java)
+        val openAppPendingIntent = PendingIntent.getActivity(applicationContext, 0, openAppIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+
         mediaData = repository.mediaData.value ?: defaultMediaData
         val image: Bitmap? = mediaData.artwork
         val title = mediaData.title
         val artist = mediaData.artist
         mediaSessionCompat?.isActive = mediaData.playbackRate
+        if (title == ""){
+            return  defaultNotification(openAppPendingIntent)
+        }
 
         val playIntent = Intent(applicationContext, BLEConnectionReceiver::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -167,8 +190,6 @@ class BLEConnectionService:Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val openAppIntent = Intent(applicationContext, MainActivity::class.java)
-        val openAppPendingIntent = PendingIntent.getActivity(applicationContext, 0, openAppIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         updatePlaybackState(
             isPlaying = mediaData.playbackRate,
@@ -233,7 +254,7 @@ class BLEConnectionService:Service() {
                 androidx.media.app.NotificationCompat.MediaStyle()
                     .setShowActionsInCompactView(0, 1, 2)
                     .setMediaSession(mediaSessionCompat!!.sessionToken)
-            )
+            ).setShowWhen(false)
             .setContentIntent(openAppPendingIntent)
             .build()
     }

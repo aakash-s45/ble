@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,10 +35,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.rememberModalBottomSheetState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -162,9 +166,13 @@ fun MediaPlayer( bottomSheetState: ModalBottomSheetState){
         Spacer(modifier = Modifier.height(10.dp))
         ProgressBar(viewModel, totalTime = currentMedia!!.duration, elapsedTime = currentMedia!!.elapsed, deviceName = deviceName)
         Spacer(modifier = Modifier.height(15.dp))
-        PlayerButtons(currentMedia!!) {
+        PlayerButtons(currentMedia!!, toggle = {
             viewModel.togglePlayPause()
-        }
+        }, next = {
+            viewModel.next()
+        }, previous = {
+            viewModel.previous()
+        })
         Spacer(modifier = Modifier.height(18.dp))
         VolumeController((currentMedia!!.volume*100).toDouble(), color = Color(194, 192, 192, 255), viewModel = viewModel)
     }
@@ -246,19 +254,28 @@ fun MusicTitle(title:String, artist:String, bottomSheetState:ModalBottomSheetSta
 fun ProgressBar(viewModel: AppViewModel, totalTime: Double, elapsedTime:Double, deviceName:String = ""){
     val isTotalTimeEnabled = true
     val backgroundColor = Color(230, 230, 230, 96)
+    val primaryColor = Color(194, 192, 192, 255)
+
 
 //    elapsedTime1 = elapsedTime
     Column {
-        CustomSeekBar(targetValue = totalTime, currentValue = elapsedTime, modifier = Modifier.height(6.dp), onInteractionEnd = {}, onPositionChange ={newValue->
-//            viewModel.updateElapsedTime(newValue)
-//            PacketManager.sendRemotePacket(RC.SEEK, newValue)
-        } )
+        StyledSeekBar(
+            targetValue = totalTime,
+            currentValue = elapsedTime,
+            x_scale = 1.03f,
+            y_scale = 1.5f,
+            primaryColor = primaryColor,
+            onValueChange = {
+            viewModel.setElapsedTimer(it.toDouble())
+        }, onValueChangeFinished = {
+                viewModel.setElapsedTimerOnRemote()
+            })
         Spacer(modifier = Modifier.height(10.dp))
 //        progress time
         Row (
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxWidth().padding(horizontal = 3.dp)
         ){
             val fontSize = 13.sp
             Text(text = convertSecondsToTime(elapsedTime), color = backgroundColor, fontSize = fontSize)
@@ -300,7 +317,7 @@ fun convertSecondsToTime(seconds: Double): String {
 }
 
 @Composable
-fun PlayerButtons(currentMedia: MediaData, toggle: ()->Unit){
+fun PlayerButtons(currentMedia: MediaData, toggle: ()->Unit, next:()->Unit, previous:()->Unit){
     val tint = Color.White
     val buttonSize = 40.dp
     val centerImageId = if( currentMedia.playbackRate) R.drawable.pause else  R.drawable.play
@@ -317,7 +334,7 @@ fun PlayerButtons(currentMedia: MediaData, toggle: ()->Unit){
             .shadow(elevation = shadowElevation)
             .rotate(180f)
             .clickable {
-                PacketManager.sendRemotePacket(RC.PREV)
+                previous()
             }
         )
         Box(
@@ -339,7 +356,7 @@ fun PlayerButtons(currentMedia: MediaData, toggle: ()->Unit){
         Icon(painter = painterResource(id = R.drawable.next), contentDescription = "next", tint = tint, modifier = Modifier
             .shadow(elevation = shadowElevation, shape = CircleShape, clip = false)
             .size(buttonSize)
-            .clickable { PacketManager.sendRemotePacket(RC.NEXT) }
+            .clickable { next() }
         )
     }
 }
@@ -360,7 +377,6 @@ fun VolumeController(volume:Double, viewModel: AppViewModel, color:Color = Color
                 .weight(1f)
                 .clickable {
                     viewModel.updateVolume(0.0)
-                    PacketManager.sendRemotePacket(RC.VOL_MIN)
                 },
             tint = color
         )
@@ -375,6 +391,10 @@ fun VolumeController(volume:Double, viewModel: AppViewModel, color:Color = Color
         }, onInteractionEnd = {
                 PacketManager.sendRemotePacket(RC.SEEK_VOL, it*100.0)
             })
+//        StyledSeekBar(targetValue = 100.0, currentValue = volume, primaryColor = color, onValueChange = {
+//            Log.i("VolumeController", "Volume Changed: ${it.toDouble()}")
+//            viewModel.updateVolume(it.toDouble()/100.0)
+//        })
         Spacer(modifier = Modifier.width(8.dp))
         Icon(
             painterResource(id = R.drawable.sound_50),
@@ -384,7 +404,6 @@ fun VolumeController(volume:Double, viewModel: AppViewModel, color:Color = Color
                 .weight(1f)
                 .clickable {
                     viewModel.updateVolume(1.00)
-                    PacketManager.sendRemotePacket(RC.VOL_PLUS)
                 }
             ,
             tint = color
@@ -456,6 +475,53 @@ fun CustomSeekBar(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun StyledSeekBar(
+    targetValue: Double,
+    currentValue: Double,
+    modifier: Modifier = Modifier,
+    backgroundColor: Color = Color(230, 230, 230, 96),
+    x_scale: Float = 1f,
+    y_scale: Float = 1f,
+    primaryColor:Color = Color.White,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit = {}
+) {
+    val _progress = currentValue
+    val progress by animateFloatAsState(targetValue = _progress.toFloat(), label="seek bar progress")
+    val interactionSource = remember { MutableInteractionSource() }
+
+    val sliderColors = SliderDefaults.colors(
+        thumbColor = primaryColor,
+        activeTrackColor = primaryColor,
+        inactiveTrackColor = backgroundColor,
+    )
+
+    Slider(value = currentValue.toFloat() , valueRange = 0f..targetValue.toFloat(),
+        onValueChange = onValueChange,
+        onValueChangeFinished = onValueChangeFinished,
+        modifier = modifier
+        .fillMaxWidth()
+        .height(10.dp),
+        interactionSource = interactionSource,
+        thumb = {
+            SliderDefaults.Thumb(
+                modifier = Modifier.scale(scaleX = 0.8f, scaleY = 0.8f),
+                interactionSource = interactionSource,
+                colors = sliderColors
+            )
+        },
+        track = { sliderPositions ->
+            SliderDefaults.Track(
+                modifier = Modifier.scale(scaleX = x_scale, scaleY = y_scale),
+                sliderPositions = sliderPositions,
+                colors = sliderColors,
+            )
+        })
+
+}
+
 
 
 @OptIn(ExperimentalMaterialApi::class)
@@ -489,6 +555,16 @@ fun MyModalBottomSheet(sheetState:ModalBottomSheetState, activity:Activity) {
                 intent.action = BLEConnectionService.ACTIONS.STOP.toString()
                 context.stopService(intent)
                 Toast.makeText(context, "Device disconnected", Toast.LENGTH_SHORT).show()
+            }
+            ModalRow(Icons.Rounded.PlayArrow, "Restart Service"){
+                val stopIntent = Intent(context, BLEConnectionService::class.java)
+                stopIntent.action = BLEConnectionService.ACTIONS.STOP.toString()
+                context.stopService(stopIntent)
+
+                val intent = Intent(context, BLEConnectionService::class.java)
+                intent.action = BLEConnectionService.ACTIONS.START.toString()
+                context.startService(intent)
+                Toast.makeText(context, "Starting Service", Toast.LENGTH_SHORT).show()
             }
         }
     }){

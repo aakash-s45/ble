@@ -17,6 +17,7 @@ class BLEConnectionReceiver: BroadcastReceiver() {
                 "PREVIOUS" -> {PacketManager.sendRemotePacket(RC.PREV)}
                 "PAUSE" -> {PacketManager.sendRemotePacket(RC.PLAY)}
                 "PLAY" -> {PacketManager.sendRemotePacket(RC.PLAY)}
+                "READ_CLIPBOARD" -> {PacketManager.checkClipboard()}
             }
 
         }

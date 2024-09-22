@@ -78,6 +78,9 @@ dependencies {
     implementation 'androidx.media:media:1.4.3'
     implementation 'androidx.compose.material:material:1.2.0'
     implementation  "com.google.protobuf:protobuf-javalite:3.18.0"
+    implementation "androidx.datastore:datastore-preferences:1.1.1"
+    implementation "androidx.datastore:datastore-core:1.1.1"
+
 }
 
 protobuf {

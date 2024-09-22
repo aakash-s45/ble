@@ -61,11 +61,10 @@ class RFCommServer (private val application: Application){
                         socket?.let {
                             Log.d(RFTAG, "Connected to ${it.remoteDevice.name}")
                             deviceName = it.remoteDevice.name
-//                            handleConnection(it, deviceName)
                             handleConnection(it, deviceName)
                         }
                     } catch (e: IOException) {
-                        Log.e(RFTAG, "Socket's accept() method failed", e)
+                        Log.e(RFTAG, "Socket's accept() method failed or something failed while handing connection", e)
                     } finally {
                         try {
                             socket?.close()
