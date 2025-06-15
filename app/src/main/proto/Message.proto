@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
-package com.example.bleexample;
+package com.local.passover;
 
 enum MessageType {
   CLIPBOARD = 0;
