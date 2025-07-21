@@ -6,55 +6,25 @@ import android.util.Log
 import com.local.passover.Message
 import com.local.passover.bluetoothClassic.NewServer
 import com.local.passover.bluetoothClassic.TG
-import com.local.passover.clipboard.ClipboardHandler
 import com.local.passover.services.BLEConnectionService
-import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
 import java.time.Duration
 import java.time.Instant
 
-enum class ConnectionState{
-    IDLE,
-    RECEIVING
-}
 
 enum class RC{
     PLAY,
     SEEK,
-    SEEK_VOL,
-    VOL_PLUS,
-    VOL_INC,
-    VOL_MIN,
-    VOL_DEC,
     NEXT,
     PREV
 }
 
-data class BPacket(val type: Char, val seq: Int, val data: ByteArray)
-
-fun BPacket.toData(): ByteArray {
-    val byteArrayOutputStream = ByteArrayOutputStream()
-    byteArrayOutputStream.write(type.code)
-    val seqBytes = ByteBuffer.allocate(4).putInt(seq).array()
-    byteArrayOutputStream.write(seqBytes)
-    byteArrayOutputStream.write(data)
-    return byteArrayOutputStream.toByteArray()
-}
 
 
 object PacketManager {
-
-    private const val INIT:Char = 'I'
-    private const val GRAPHICS:Char = 'G'
-    private const val METADATA:Char = 'M'
-    private const val REMOTE:Char = 'R'
-    private const val ACCESS:Char = 'A'
-
     private var lastNotificationInstant:Instant? = null
     private var rateLimit = 500L
     private  var viewModel:AppViewModel? = null
     private lateinit var application: Application
-    private  var clipboardHandler: ClipboardHandler? = null
 
     init {
         lastNotificationInstant = Instant.now()

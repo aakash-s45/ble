@@ -58,6 +58,7 @@ class BLEConnectionService:Service() {
         val notification = defaultNotification()
         startForeground(1, notification)
         isServiceRunning = true
+        repository.setServiceRunning(isServiceRunning)
         NewServer.start(application)
         setupScreenshotObserver()
     }
@@ -67,6 +68,7 @@ class BLEConnectionService:Service() {
         stopService()
         super.onDestroy()
         isServiceRunning = false
+        repository.setServiceRunning(isServiceRunning)
     }
 
     private fun stopService(){

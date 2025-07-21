@@ -12,7 +12,6 @@ import android.util.Log
 import com.local.passover.Message
 import com.local.passover.classes.PacketManager
 import com.local.passover.utils.uuidBTClassic
-import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.OutputStream
@@ -182,28 +181,6 @@ class RFCommServer (private val application: Application){
     }
 
     @Synchronized
-    private fun writeToOutputStream_V2(data: ByteArray) {
-        if (outputStream==null){
-            Log.e("BluetoothServer", "Output stream is null")
-            return
-        }
-
-        try {
-            //Send the size of the data first
-            val sizeInfo = ByteBuffer.allocate(4).putInt(data.size).array()
-            outputStream?.write(sizeInfo)
-            // Now send the data
-            val bos = BufferedOutputStream(outputStream, 4096) // you can adjust this value and play around
-
-            bos.write(data)
-            bos.flush()
-        } catch (e: IOException) {
-            Log.e("BluetoothServer", "Error occurred when writing", e)
-        }
-    }
-
-
-
     fun sendData(data: ByteArray) {
         val currentSocket = bluetoothSocket
         val currentOutputStream = outputStream
