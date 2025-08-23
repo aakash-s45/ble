@@ -29,7 +29,6 @@ class ClipboardMonitor : AccessibilityService() {
         }
         val intent = Intent(applicationContext, BLEConnectionService::class.java)
         intent.action = BLEConnectionService.ACTIONS.START.toString()
-//        startService(intent)
         startForegroundService(intent)
         Timber.tag(CMON_TAG).d( "✅ Service connected")
     }
