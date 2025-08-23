@@ -13,13 +13,18 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.local.passover.MainActivity
 import com.local.passover.R
+import com.local.passover.bluetoothClassic.BluetoothL2capManager
 import com.local.passover.classes.AppRepository
-import com.local.passover.bluetoothClassic.NewServer
+import com.local.passover.classes.NetworkManager
 import com.local.passover.classes.PacketManager
 import com.local.passover.clipboard.ClipboardActivity
 import com.local.passover.clipboard.ScreenshotObserver
 import dagger.hilt.android.AndroidEntryPoint
+import timber.log.Timber
 import javax.inject.Inject
+import kotlin.concurrent.timer
+
+const val BLE_SERVICE_TAG = "BLEConnectionService"
 
 @AndroidEntryPoint
 class BLEConnectionService:Service() {
@@ -39,13 +44,12 @@ class BLEConnectionService:Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent != null) {
             val action = intent.action
-            Log.i("BLEService", action.toString())
+            Timber.tag(BLE_SERVICE_TAG).i("Received action: $action")
             when(action){
                 ACTIONS.START.toString() -> onStart()
                 ACTIONS.STOP.toString() -> stopService()
             }
         }
-//        return super.onStartCommand(intent, flags, startId)
         return START_STICKY
     }
 
@@ -59,12 +63,13 @@ class BLEConnectionService:Service() {
         startForeground(1, notification)
         isServiceRunning = true
         repository.setServiceRunning(isServiceRunning)
-        NewServer.start(application)
+        BluetoothL2capManager.startServer(applicationContext)
+        NetworkManager.startServer(applicationContext)
         setupScreenshotObserver()
     }
 
     override fun onDestroy() {
-        Log.i("BLEService", "Destroying service")
+        Timber.tag(BLE_SERVICE_TAG).i("Destroying service")
         stopService()
         super.onDestroy()
         isServiceRunning = false
@@ -72,12 +77,13 @@ class BLEConnectionService:Service() {
     }
 
     private fun stopService(){
-        NewServer.stop()
+        NetworkManager.stopServer()
+        BluetoothL2capManager.closeConnection()
 
         if (screenshotObserver != null) {
             contentResolver.unregisterContentObserver(screenshotObserver!!)
             screenshotObserver = null // Clear the reference
-            Log.i("BLEService", "ScreenshotObserver unregistered.")
+            Timber.tag(BLE_SERVICE_TAG).i("ScreenshotObserver unregistered.")
         }
 
 //        TODO: check this
@@ -126,10 +132,10 @@ class BLEConnectionService:Service() {
     }
 
     private fun setupScreenshotObserver() {
-        Log.d("CCService", "Setup screenshot observer")
+        Timber.tag(BLE_SERVICE_TAG).i("Setting up screenshot observer")
         screenshotObserver = ScreenshotObserver(this, mainThreadHandler) { uri ->
             // This code block will be executed when a screenshot is detected
-            Log.d("CCService", "Screenshot detected! URI: $uri. Launching reader...")
+            Timber.tag(BLE_SERVICE_TAG).i("Screenshot detected! URI: $uri")
         }
 
         // Register the observer to listen for changes to images

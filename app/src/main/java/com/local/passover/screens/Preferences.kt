@@ -1,6 +1,5 @@
 package com.local.passover.screens
 
-import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -128,7 +127,6 @@ fun ConfigureWebhook(navController: NavController){
                 ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = {
-                    Log.d("URL", url)
                     coroutineScope.launch {
                         dataStoreHelper.saveUrl(url)
                     }

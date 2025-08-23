@@ -10,11 +10,13 @@ import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
-import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import timber.log.Timber
 import java.io.InputStream
 import javax.inject.Inject
 import javax.inject.Singleton
+
+const val CHANDLER_TAG = "ClipboardHandler"
 
 @Singleton
 class ClipboardHandler  @Inject constructor(@ApplicationContext private val context: Context) {
@@ -53,7 +55,7 @@ class ClipboardHandler  @Inject constructor(@ApplicationContext private val cont
     }
 
     fun addDataToClipboard(data: String, type: String, deviceName:String? = "Remote") {
-        Log.i("Clipboard", "Adding clipboard data: $data")
+        Timber.tag(CHANDLER_TAG).i("Adding clipboard data: $data")
         isAddingData = true
 
         val clip: ClipData = when (type) {
@@ -67,16 +69,16 @@ class ClipboardHandler  @Inject constructor(@ApplicationContext private val cont
                         ClipData.newUri(context.contentResolver, "from $deviceName", imageUri)
                     }
                     else{
-                        Log.i("Clipboard", "image uri data null")
+                        Timber.tag(CHANDLER_TAG).w("image uri data null")
                         return
                     }
                 } else {
-                    Log.e("Clipboard", "Invalid base64 image data")
+                    Timber.tag(CHANDLER_TAG).w("Invalid base64 image data")
                     return
                 }
             }
             else -> {
-                Log.e("Clipboard", "Unsupported type: $type")
+                Timber.tag(CHANDLER_TAG).w("Unsupported type: $type")
                 return
             }
         }
@@ -117,15 +119,15 @@ class ClipboardHandler  @Inject constructor(@ApplicationContext private val cont
             val bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
             bitmap != null
         } catch (e: IllegalArgumentException) {
-            Log.e("Base64Validation", "Invalid base64 string", e)
+            Timber.tag(CHANDLER_TAG).e(e, "Invalid base64 string")
             false
         } catch (e: Exception) {
-            Log.e("Base64Validation", "Error decoding base64 image", e)
+            Timber.tag(CHANDLER_TAG).e(e, "Error decoding base64 image")
             false
         }
     }
     private fun gotNewData(data: String) {
         // Handle the new clipboard data here
-        Log.i("Clipboard", "New clipboard data: $data")
+        Timber.tag(CHANDLER_TAG).i("New clipboard data: $data")
     }
 }

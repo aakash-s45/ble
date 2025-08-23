@@ -2,14 +2,13 @@ package com.local.passover.clipboard
 
 import android.content.ClipboardManager
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import com.local.passover.classes.PacketManager
+import timber.log.Timber
 
 class ClipboardActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // no setContentView—this is fully transparent
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -24,7 +23,7 @@ class ClipboardActivity : ComponentActivity() {
             ?.toString()
             ?: "<empty>"
 
-        Log.d("ClipReaderAct", "📑 Clipboard now contains: “$text”")
+        Timber.tag("ClipboardActivity").d("📑 Clipboard now contains: “$text”")
         PacketManager.sendClipboard(text)
         finish()
     }

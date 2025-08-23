@@ -29,8 +29,11 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.local.passover.bluetoothClassic.BluetoothL2capManager
 import com.local.passover.classes.AppViewModel
+import com.local.passover.classes.NetworkManager
 import com.local.passover.services.BLEConnectionService
+import com.local.passover.utils.LogExporter
 
 @Composable
 fun Home(activity: Activity) {
@@ -62,6 +65,8 @@ fun FirstPage(navController: NavController, activity: Activity) {
     val context = LocalContext.current
     val viewModel: AppViewModel = hiltViewModel()
     val isServiceRunning by viewModel.isServiceRunning.collectAsState()
+    val status by BluetoothL2capManager.status.collectAsState()
+    val currentClient by BluetoothL2capManager.currentClient.collectAsState()
 
     var text by remember { mutableStateOf("Hello") }
 
@@ -92,6 +97,11 @@ fun FirstPage(navController: NavController, activity: Activity) {
                             "⚠️ This is necessary for the app to interact with system UI.",
                     style = MaterialTheme.typography.bodyMedium
                 )
+                Button(onClick = {
+                    NetworkManager.findMacServer()
+                }){
+                    Text("Find mac server")
+                }
 
                 if (!isServiceRunning) {
                     Button(
@@ -124,17 +134,30 @@ fun FirstPage(navController: NavController, activity: Activity) {
                         Text("START Service")
                     }
                 } else {
-                    Button(
-                        onClick = {
-                            val intent = Intent(context, BLEConnectionService::class.java).apply {
-                                action = BLEConnectionService.ACTIONS.STOP.toString()
-                            }
-                            activity.stopService(intent)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("STOP Service")
+                    Column {
+                        Text(status)
+                        Text(currentClient)
+                        Button(
+                            onClick = {
+                                val intent = Intent(context, BLEConnectionService::class.java).apply {
+                                    action = BLEConnectionService.ACTIONS.STOP.toString()
+                                }
+                                activity.stopService(intent)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("STOP Service")
+                        }
                     }
+                }
+
+                Button(
+                    onClick = {
+                        LogExporter.export(context)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Export Logs")
                 }
             }
         }

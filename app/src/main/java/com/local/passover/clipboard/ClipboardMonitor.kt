@@ -4,9 +4,11 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.annotation.SuppressLint
 import android.content.Intent
-import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.local.passover.services.BLEConnectionService
+import timber.log.Timber
+
+const val CMON_TAG = "ClipboardMonitor"
 
 class ClipboardMonitor : AccessibilityService() {
     private var currentFocusedApp: String = ""
@@ -28,7 +30,7 @@ class ClipboardMonitor : AccessibilityService() {
         val intent = Intent(applicationContext, BLEConnectionService::class.java)
         intent.action = BLEConnectionService.ACTIONS.START.toString()
         startService(intent)
-        Log.d("CCService", "✅ Service connected")
+        Timber.tag(CMON_TAG).d( "✅ Service connected")
     }
 
 
@@ -49,7 +51,7 @@ class ClipboardMonitor : AccessibilityService() {
                 val labelMatches = event.text.any { it.toString().contains("copy", ignoreCase = true) || it.toString().contains("cut", ignoreCase = true) }
 
                 if (desc.contains("copy", true) || labelMatches) {
-                    Log.d("CCService", "↪️ Detected Copy-click; desc=“$desc”, textList=${event.text}")
+                    Timber.tag(CMON_TAG).d( "↪️ Detected Copy-click; desc=“$desc”, textList=${event.text}")
                     launchReader()
                 }
             }
@@ -58,7 +60,7 @@ class ClipboardMonitor : AccessibilityService() {
                 // Catch toasts like “Link copied to clipboard”
                 event.text.forEach { t ->
                     if (t.toString().contains("copied", ignoreCase = true)) {
-                        Log.d("CCService", "🔔 Detected notification “$t”, launching reader…")
+                        Timber.tag(CMON_TAG).d( "🔔 Detected notification “$t”, launching reader…")
                         launchReader()
                         return
                     }

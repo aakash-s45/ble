@@ -9,7 +9,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -27,6 +26,7 @@ import com.local.passover.ui.theme.BLEExampleTheme
 import com.local.passover.utils.askPermissions
 import com.local.passover.utils.requiredPermissionsInitialClient
 import dagger.hilt.android.AndroidEntryPoint
+import timber.log.Timber
 import javax.inject.Inject
 import kotlin.system.exitProcess
 
@@ -41,21 +41,20 @@ class MainActivity : ComponentActivity() {
 
     private val multiplePermissionLauncher =
             registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-                Log.i(TAG, "Launcher result: $permissions")
+                Timber.tag(TAG).i("Launcher result: $permissions")
                 if (permissions.containsValue(false)) {
-                    Log.i(TAG, "At least one of the permissions was not granted.")
+                    Timber.tag(TAG).i("At least one of the permissions was not granted.")
                     Toast.makeText(
                         this,
                         "At least one of the permissions was not granted. Please do so manually",
                         Toast.LENGTH_SHORT
                     ).show()
                 } else {
-                    Log.d(TAG, "onCreate: all permissions granted")
+                    Timber.tag(TAG).d("onCreate: all permissions granted")
                 }
             }
 
     override fun onStart() {
-        Log.i("onStart", "starting")
 //        val intent = Intent(applicationContext, BLEConnectionService::class.java)
 //        intent.action = BLEConnectionService.ACTIONS.START.toString()
 //        applicationContext.startService(intent)
@@ -63,7 +62,6 @@ class MainActivity : ComponentActivity() {
         super.onStart()
     }
     override fun onStop() {
-        Log.i(TAG, "Stopped main activity")
         super.onStop()
     }
 
@@ -80,9 +78,9 @@ class MainActivity : ComponentActivity() {
         }
 
         askPermissions(multiplePermissionLauncher, requiredPermissionsInitialClient,this){
-            Log.d(TAG, "onCreate: permissions granted")
+            Timber.tag(TAG).d("onCreate: all permissions granted")
         }
-        val bluetoothManger = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        val bluetoothManger = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManger.adapter
 
         if(!bluetoothAdapter.isEnabled){
