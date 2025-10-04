@@ -140,7 +140,7 @@ fun FirstPage(navController: NavController, activity: Activity) {
                 } else {
                     Column {
                         Text(status)
-                        Text(currentClient)
+                        Text(currentClient.toString())
                         Button(
                             onClick = {
                                 val intent = Intent(context, BLEConnectionService::class.java).apply {

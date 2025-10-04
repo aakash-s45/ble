@@ -18,16 +18,19 @@ import com.local.passover.utils.L2CAP_SERVICE_UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.concurrent.Volatile
 import kotlin.math.min
 
 
@@ -35,101 +38,123 @@ import kotlin.math.min
 object BluetoothL2capManager {
 
     private const val TAG = "BluetoothL2capManager"
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private var serverSocket: BluetoothServerSocket? = null
-    private var clientSocket: BluetoothSocket? = null
+    private var bluetoothAdapter: BluetoothAdapter? = null
     private var bluetoothLeAdvertiser: BluetoothLeAdvertiser? = null
-    private var isListening: Boolean = true
+
+    @Volatile
+    private var clientSocket: BluetoothSocket? = null
 
 //    update the viewmodel
-    private val _status = MutableStateFlow("Disconnected")
+    private val _status = MutableStateFlow("Stopped")
     val status = _status.asStateFlow()
 
     //    current device
-    private val _currentClient = MutableStateFlow("")
+    private val _currentClient = MutableStateFlow<String?>(null)
     val currentClient = _currentClient.asStateFlow()
 
 
     @SuppressLint("NewApi")
     fun startServer(context: Context) {
-        if (serverSocket != null) {
-            _status.value = "Server already running."
+        if (scope.isActive){
+            Timber.tag(TAG).w("Server is already running or starting.")
             return
         }
 
+        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
         val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        val bluetoothAdapter = bluetoothManager.adapter
-        bluetoothLeAdvertiser = bluetoothAdapter.bluetoothLeAdvertiser
-        listenForConnection(bluetoothAdapter)
+        bluetoothAdapter = bluetoothManager.adapter
+        if(bluetoothAdapter == null){
+            _status.value = "Bluetooth is not available"
+            Timber.tag(TAG).e("Bluetooth is not available")
+            return
+        }
+        bluetoothLeAdvertiser = bluetoothAdapter?.bluetoothLeAdvertiser
+        listenForConnection()
     }
 
-    private fun listenForConnection(bluetoothAdapter: BluetoothAdapter){
+    private fun listenForConnection(){
         scope.launch {
-            while (isListening && isActive){
+            while (isActive){
+                var tempServerSocket: BluetoothServerSocket? = null
                 try {
-                    serverSocket = bluetoothAdapter.listenUsingInsecureL2capChannel()
-                    val psm = serverSocket!!.psm
+                    tempServerSocket = bluetoothAdapter?.listenUsingInsecureL2capChannel()
+                    val psm = tempServerSocket!!.psm
                     _status.value = "Server listening with PSM: $psm"
                     Timber.tag(TAG).d("Server listening with PSM: $psm")
 
                     startPsmAdvertising(psm)
 
-                    clientSocket = serverSocket?.accept()
-                    _status.value = "Connected to ${clientSocket?.remoteDevice?.name}"
-                    Timber.tag(TAG).d("Connection accepted from ${clientSocket?.remoteDevice?.address}")
-                    _currentClient.value = clientSocket?.remoteDevice?.name.toString()
+//                  waits for client to connect
+                    val socket = tempServerSocket.accept()
+//                  client connected: stop advertising and close the server socket
 
                     stopPsmAdvertising()
-                    listenForMessages()
+                    tempServerSocket.close()
+
+                    _status.value = "Connected to ${socket.remoteDevice.name}"
+                    Timber.tag(TAG).d("Connection accepted from ${socket.remoteDevice.address}")
+                    clientSocket = socket
+
+                    handleConnection(socket)
                 } catch (e: IOException) {
-                    Timber.tag(TAG).e(e, "Server connection error")
-                    _status.value = "Error: ${e.message}"
-                    closeConnection()
+                    if(isActive){
+                        Timber.tag(TAG).e(e, "Connection loop error. Restarting...")
+                        _status.value = "Error: ${e.message}. Restarting listener."
+                    }
+                }finally {
+                    stopPsmAdvertising()
+                    tempServerSocket?.close()
+                    clientSocket?.close()
+                    clientSocket = null
+                    _currentClient.value = null
+                    _status.value = "Disconnected. Waiting for new connection..."
                 }
             }
+            Timber.tag(TAG).i("Connection listener has been stopped.")
         }
     }
 
-    fun listenForMessages() {
+    private suspend  fun handleConnection(socket: BluetoothSocket){
         NetworkManager.findMacServer()
-        scope.launch {
-            clientSocket?.inputStream?.let { inputStream ->
-                Timber.tag(TAG).i("👂 Started listening for messages.")
+        withContext(Dispatchers.IO){
+            try {
+                val inputStream = socket.inputStream
+                Timber.tag(TAG).i("Started listening for messages.")
 
-                while (isActive) {
-                    try {
-                        val sizeBuffer = ByteArray(4)
-                        val bytesReadForSize = inputStream.read(sizeBuffer, 0, 4)
+                while (isActive){
+                    val sizeBuffer = ByteArray(4)
+                    val bytesReadForSize = inputStream.read(sizeBuffer, 0, 4)
 
-                        if (bytesReadForSize != 4) {
-                            Timber.tag(TAG).d("Bytes read for size: $bytesReadForSize")
-                            break
-                        }
+                    if (bytesReadForSize < 4) {
+                        Timber.tag(TAG).w("Stream closed while reading size. Disconnecting.")
+                        break
+                    }
 
-                        val dataSize = ByteBuffer.wrap(sizeBuffer).getInt()
-                        Timber.tag(TAG).i("Expecting message of size: $dataSize bytes.")
+                    val dataSize = ByteBuffer.wrap(sizeBuffer).getInt()
+                    if (dataSize <= 0 || dataSize > 1_000_000) { // 1MB limit
+                        Timber.tag(TAG).e("Invalid payload size received: $dataSize. Closing connection.")
+                        break
+                    }
 
-                        val payload = readExactly(inputStream, dataSize)
+                    Timber.tag(TAG).i("Expecting message of size: $dataSize bytes.")
+                    val payload = readExactly(inputStream, dataSize)
 
-                        if (payload != null) {
-                            Timber.tag(TAG).i("✅ Message received with ${payload.size} bytes.")
-                            val message = String(payload, 0, payload.size)
-                            Timber.tag(TAG).d("Received: $message")
-                            readData(payload, payload.size, clientSocket?.remoteDevice?.name)
-                            // TODO: Process the complete `payload` here!
-                        } else {
-                            Timber.tag(TAG).e("Failed to read full payload.")
-                            break
-                        }
-
-                    } catch (e: IOException) {
-                        Timber.tag(TAG).e(e, "Input stream disconnected.")
+                    if (payload != null){
+                        val preview = payload.take(20).joinToString("") { "%02x".format(it) }
+                        Timber.tag(TAG).i("Message received with ${payload.size} bytes. Preview: $preview...")
+                        readData(payload, payload.size, socket.remoteDevice?.name)
+                    } else{
+                        Timber.tag(TAG).e("Failed to read full payload. Closing connection.")
                         break
                     }
                 }
-                Timber.tag(TAG).w("🛑 Stopped listening for messages.")
-
+            }catch (e: IOException){
+                Timber.tag(TAG).w(e, "Connection lost.")
+            }finally {
+                Timber.tag(TAG).w("🛑 Stopped listening for messages. Connection closing.")
             }
         }
     }
@@ -164,29 +189,30 @@ object BluetoothL2capManager {
         PacketManager.packetDelegator(data,  deviceName)
     }
 
-    @Synchronized
     fun send(data: ByteArray) {
-        scope.launch {
-            val outputStream = clientSocket?.outputStream
-            if (outputStream == null) {
-                Timber.tag(TAG).e("Cannot send data, output stream is null.")
-                return@launch
-            }
 
+        val currentSocket = clientSocket
+        if (currentSocket == null || !currentSocket.isConnected){
+            Timber.tag(TAG).e("Cannot send data, client socket is null or not connected.")
+            return
+        }
+        scope.launch {
             try {
+                val outputStream = currentSocket.outputStream
                 val dataSize = data.size
                 val sizeBuffer = ByteBuffer.allocate(4).putInt(dataSize).array()
-                outputStream.write(sizeBuffer)
-                outputStream.write(data)
-                outputStream.flush()
 
-                Timber.tag(TAG).i("✅ Successfully sent $dataSize bytes.")
+                synchronized(outputStream){
+                    outputStream.write(sizeBuffer)
+                    outputStream.write(data)
+                    outputStream.flush()
+                }
+                Timber.tag(TAG).i("Successfully sent $dataSize bytes.")
 
             } catch (e: IOException) {
-                Timber.tag(TAG).e(e, "Error occurred when sending data.")
+                Timber.tag(TAG).e(e, "Error sending data. Connection may be lost")
             }
         }
-
     }
 
 
@@ -224,18 +250,14 @@ object BluetoothL2capManager {
     }
 
     fun closeConnection() {
-        try {
-            clientSocket?.close()
-            serverSocket?.close()
-            stopPsmAdvertising()
-        } catch (e: IOException) {
-            Timber.tag(TAG).e(e, "Error closing sockets")
-        } finally {
-            clientSocket = null
-            serverSocket = null
-            _status.value = "Disconnected"
-            _currentClient.value = ""
-            isListening = false
-        }
+        if(!scope.isActive)return
+        _status.value = "Stopping..."
+        Timber.tag(TAG).i("Stopping server and closing all connections")
+        scope.cancel()
+        stopPsmAdvertising()
+        clientSocket?.close()
+        clientSocket = null
+        _currentClient.value = null
+        _status.value = "Stopped"
     }
 }
