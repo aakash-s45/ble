@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace 'com.local.passover'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.local.passover"

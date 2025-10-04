@@ -33,7 +33,6 @@ import com.local.passover.bluetoothClassic.BluetoothL2capManager
 import com.local.passover.classes.AppViewModel
 import com.local.passover.classes.NetworkManager
 import com.local.passover.services.BLEConnectionService
-import com.local.passover.utils.LogExporter
 
 @Composable
 fun Home(activity: Activity) {
@@ -55,6 +54,11 @@ fun Home(activity: Activity) {
         }
         composable("ConfigureNotifications") {
             ConfigureNotifications(navController = navController)
+        }
+        composable("logViewer"){
+            LogViewerScreen(onNavigateUp = {
+                navController.navigateUp()
+            })
         }
     }
 }
@@ -153,11 +157,11 @@ fun FirstPage(navController: NavController, activity: Activity) {
 
                 Button(
                     onClick = {
-                        LogExporter.export(context)
+                        navController.navigate("logViewer")
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Export Logs")
+                    Text("View Logs")
                 }
             }
         }
