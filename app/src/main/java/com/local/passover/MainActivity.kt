@@ -27,6 +27,7 @@ import com.local.passover.utils.askPermissions
 import com.local.passover.utils.requiredPermissionsInitialClient
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
+import java.util.concurrent.Executors
 import javax.inject.Inject
 import kotlin.system.exitProcess
 
@@ -38,6 +39,8 @@ class MainActivity : ComponentActivity() {
     private val appViewModel by viewModels<AppViewModel>()
     @Inject
     lateinit var repository:AppRepository
+
+    private val cameraExecutor = Executors.newSingleThreadExecutor()
 
     private val multiplePermissionLauncher =
             registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
@@ -107,6 +110,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        cameraExecutor.shutdown()
         unregisterReceiver(mReceiver)
         unregisterReceiver(stopAppReceiver)
     }

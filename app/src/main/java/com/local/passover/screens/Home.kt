@@ -60,6 +60,11 @@ fun Home(activity: Activity) {
                 navController.navigateUp()
             })
         }
+        composable("scanQR"){
+            QRScannerScreen(onNavigateUp = {
+                navController.navigateUp()
+            })
+        }
     }
 }
 
@@ -162,6 +167,14 @@ fun FirstPage(navController: NavController, activity: Activity) {
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("View Logs")
+                }
+                Button(
+                    onClick = {
+                        navController.navigate("scanQR")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Scan QR")
                 }
             }
         }

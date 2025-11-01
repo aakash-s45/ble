@@ -30,6 +30,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.Volatile
 import kotlin.math.min
 
@@ -38,13 +39,14 @@ import kotlin.math.min
 object BluetoothL2capManager {
 
     private const val TAG = "BluetoothL2capManager"
-    private var scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var scope: CoroutineScope? = null
 
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var bluetoothLeAdvertiser: BluetoothLeAdvertiser? = null
 
     @Volatile
     private var clientSocket: BluetoothSocket? = null
+    private val isServerRunning = AtomicBoolean(false)
 
 //    update the viewmodel
     private val _status = MutableStateFlow("Stopped")
@@ -57,7 +59,7 @@ object BluetoothL2capManager {
 
     @SuppressLint("NewApi")
     fun startServer(context: Context) {
-        if (scope.isActive){
+        if (isServerRunning.getAndSet(true)){
             Timber.tag(TAG).w("Server is already running or starting.")
             return
         }
@@ -76,7 +78,7 @@ object BluetoothL2capManager {
     }
 
     private fun listenForConnection(){
-        scope.launch {
+        scope?.launch {
             while (isActive){
                 var tempServerSocket: BluetoothServerSocket? = null
                 try {
@@ -196,7 +198,7 @@ object BluetoothL2capManager {
             Timber.tag(TAG).e("Cannot send data, client socket is null or not connected.")
             return
         }
-        scope.launch {
+        scope?.launch {
             try {
                 val outputStream = currentSocket.outputStream
                 val dataSize = data.size
@@ -250,10 +252,16 @@ object BluetoothL2capManager {
     }
 
     fun closeConnection() {
-        if(!scope.isActive)return
+        if(!isServerRunning.getAndSet(false)){
+            return
+        }
+
         _status.value = "Stopping..."
         Timber.tag(TAG).i("Stopping server and closing all connections")
-        scope.cancel()
+
+        scope?.cancel()
+        scope = null
+
         stopPsmAdvertising()
         clientSocket?.close()
         clientSocket = null
