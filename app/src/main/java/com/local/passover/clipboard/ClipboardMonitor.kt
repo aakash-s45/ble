@@ -5,42 +5,43 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
-import com.local.passover.services.BLEConnectionService
+import com.local.passover.services.MainService
 import timber.log.Timber
 
-const val CMON_TAG = "ClipboardMonitor"
 
+@SuppressLint("AccessibilityPolicy")
 class ClipboardMonitor : AccessibilityService() {
+    private val CMON_TAG = "ClipboardMonitor"
     private var currentFocusedApp: String = ""
-
-    val launchReaderOnLongPress = setOf<String>("com.google.android.apps.authenticator2")
+    val launchReaderOnLongPress = setOf("com.google.android.apps.authenticator2")
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-//        TODO: start bluetooth service here
+
+        startMainService()
 
         serviceInfo = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPE_VIEW_CLICKED or
                     AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED or AccessibilityEvent.TYPE_VIEW_LONG_CLICKED or AccessibilityEvent.TYPE_WINDOWS_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            notificationTimeout = 50
+            notificationTimeout = 100
             flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
         }
-        val intent = Intent(applicationContext, BLEConnectionService::class.java)
-        intent.action = BLEConnectionService.ACTIONS.START.toString()
-        startForegroundService(intent)
-        Timber.tag(CMON_TAG).d( "✅ Service connected")
+
+        Timber.tag(CMON_TAG).d( "Service Connected")
     }
 
 
     @SuppressLint("SwitchIntDef")
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        var shouldTrigger = false
         when (event.eventType) {
             AccessibilityEvent.TYPE_VIEW_LONG_CLICKED -> {
                 updateCurrentAppName(event)
                 if(launchReaderOnLongPress.contains(currentFocusedApp)){
-                    launchReader()
+                    Timber.tag(CMON_TAG).d( "Detected long press on configured app")
+                    launchClipboardActivity()
                 }
             }
 
@@ -51,8 +52,8 @@ class ClipboardMonitor : AccessibilityService() {
                 val labelMatches = event.text.any { it.toString().contains("copy", ignoreCase = true) || it.toString().contains("cut", ignoreCase = true) }
 
                 if (desc.contains("copy", true) || labelMatches) {
-                    Timber.tag(CMON_TAG).d( "↪️ Detected Copy-click; desc=“$desc”, textList=${event.text}")
-                    launchReader()
+                    Timber.tag(CMON_TAG).d( "Detected copy/cut tap")
+                    launchClipboardActivity()
                 }
             }
 
@@ -60,8 +61,8 @@ class ClipboardMonitor : AccessibilityService() {
                 // Catch toasts like “Link copied to clipboard”
                 event.text.forEach { t ->
                     if (t.toString().contains("copied", ignoreCase = true)) {
-                        Timber.tag(CMON_TAG).d( "🔔 Detected notification “$t”, launching reader…")
-                        launchReader()
+                        Timber.tag(CMON_TAG).d( "Detected copy related toast")
+                        launchClipboardActivity()
                         return
                     }
                 }
@@ -76,8 +77,13 @@ class ClipboardMonitor : AccessibilityService() {
         }
     }
 
+    private fun startMainService(){
+        val intent = Intent(applicationContext, MainService::class.java)
+        startForegroundService(intent)
+    }
 
-    private fun launchReader() {
+
+    private fun launchClipboardActivity() {
         val intent = Intent(this, ClipboardActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                     or Intent.FLAG_ACTIVITY_CLEAR_TASK

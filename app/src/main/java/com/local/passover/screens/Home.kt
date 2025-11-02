@@ -1,8 +1,6 @@
 package com.local.passover.screens
 
 import android.app.Activity
-import android.content.Intent
-import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,7 +14,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,37 +21,32 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.local.passover.bluetoothClassic.BluetoothL2capManager
-import com.local.passover.classes.AppViewModel
-import com.local.passover.classes.NetworkManager
-import com.local.passover.services.BLEConnectionService
 
 @Composable
 fun Home(activity: Activity) {
     val navController = rememberNavController()
-    val viewModel: AppViewModel = hiltViewModel()
+//    val viewModel: AppViewModel = hiltViewModel()
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {
 //            NewHome(activity = activity, navController = navController, viewModel = viewModel)
             FirstPage(navController = navController, activity)
         }
-        composable("Preferences") {
-            Preferences(navController = navController)
-        }
-        composable("ConfigureWebhook") {
-            ConfigureWebhook(navController = navController)
-        }
-        composable("ManageContacts") {
-            ManageContacts(navController = navController)
-        }
-        composable("ConfigureNotifications") {
-            ConfigureNotifications(navController = navController)
-        }
+//        composable("Preferences") {
+//            Preferences(navController = navController)
+//        }
+//        composable("ConfigureWebhook") {
+//            ConfigureWebhook(navController = navController)
+//        }
+//        composable("ManageContacts") {
+//            ManageContacts(navController = navController)
+//        }
+//        composable("ConfigureNotifications") {
+//            ConfigureNotifications(navController = navController)
+//        }
         composable("logViewer"){
             LogViewerScreen(onNavigateUp = {
                 navController.navigateUp()
@@ -72,10 +64,10 @@ fun Home(activity: Activity) {
 @Composable
 fun FirstPage(navController: NavController, activity: Activity) {
     val context = LocalContext.current
-    val viewModel: AppViewModel = hiltViewModel()
-    val isServiceRunning by viewModel.isServiceRunning.collectAsState()
-    val status by BluetoothL2capManager.status.collectAsState()
-    val currentClient by BluetoothL2capManager.currentClient.collectAsState()
+//    val viewModel: AppViewModel = hiltViewModel()
+//    val isServiceRunning by viewModel.isServiceRunning.collectAsState()
+//    val status by BluetoothL2capManager.status.collectAsState()
+//    val currentClient by BluetoothL2capManager.currentClient.collectAsState()
 
     var text by remember { mutableStateOf("Hello") }
 
@@ -106,22 +98,22 @@ fun FirstPage(navController: NavController, activity: Activity) {
                             "⚠️ This is necessary for the app to interact with system UI.",
                     style = MaterialTheme.typography.bodyMedium
                 )
-                Button(onClick = {
-                    NetworkManager.findMacServer()
-                }){
-                    Text("Find mac server")
-                }
+//                Button(onClick = {
+//                    NetworkManager.findMacServer()
+//                }){
+//                    Text("Find mac server")
+//                }
 
-                if (!isServiceRunning) {
-                    Button(
-                        onClick = {
-                            activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Open Accessibility Settings")
-                    }
-                }
+//                if (!isServiceRunning) {
+//                    Button(
+//                        onClick = {
+//                            activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+//                        },
+//                        modifier = Modifier.fillMaxWidth()
+//                    ) {
+//                        Text("Open Accessibility Settings")
+//                    }
+//                }
 
                 Divider()
 
@@ -130,35 +122,35 @@ fun FirstPage(navController: NavController, activity: Activity) {
                     style = MaterialTheme.typography.titleMedium
                 )
 
-                if (!isServiceRunning) {
-                    Button(
-                        onClick = {
-                            val intent = Intent(context, BLEConnectionService::class.java).apply {
-                                action = BLEConnectionService.ACTIONS.START.toString()
-                            }
-                            activity.startService(intent)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("START Service")
-                    }
-                } else {
-                    Column {
-                        Text(status)
-                        Text(currentClient.toString())
-                        Button(
-                            onClick = {
-                                val intent = Intent(context, BLEConnectionService::class.java).apply {
-                                    action = BLEConnectionService.ACTIONS.STOP.toString()
-                                }
-                                activity.stopService(intent)
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("STOP Service")
-                        }
-                    }
-                }
+//                if (!isServiceRunning) {
+//                    Button(
+//                        onClick = {
+//                            val intent = Intent(context, BLEConnectionService::class.java).apply {
+//                                action = BLEConnectionService.ACTIONS.START.toString()
+//                            }
+//                            activity.startService(intent)
+//                        },
+//                        modifier = Modifier.fillMaxWidth()
+//                    ) {
+//                        Text("START Service")
+//                    }
+//                } else {
+//                    Column {
+//                        Text(status)
+//                        Text(currentClient.toString())
+//                        Button(
+//                            onClick = {
+//                                val intent = Intent(context, BLEConnectionService::class.java).apply {
+//                                    action = BLEConnectionService.ACTIONS.STOP.toString()
+//                                }
+//                                activity.stopService(intent)
+//                            },
+//                            modifier = Modifier.fillMaxWidth()
+//                        ) {
+//                            Text("STOP Service")
+//                        }
+//                    }
+//                }
 
                 Button(
                     onClick = {

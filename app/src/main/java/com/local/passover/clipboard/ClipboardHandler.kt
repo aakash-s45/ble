@@ -12,52 +12,17 @@ import android.provider.MediaStore
 import android.util.Base64
 import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
-import java.io.InputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
-const val CHANDLER_TAG = "ClipboardHandler"
 
 @Singleton
-class ClipboardHandler  @Inject constructor(@ApplicationContext private val context: Context) {
+class ClipboardHandler  @Inject constructor(@param:ApplicationContext private val context: Context) {
+    private val CHANDLER_TAG = "ClipboardHandler"
     private val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    private var lastClipData: String? = null
-    private var isAddingData = false
-
-
-    fun checkClipboard() {
-        if (isAddingData) return
-
-        val currentClipData = clipboardManager.primaryClip?.getItemAt(0)?.let { item ->
-            when {
-                item.text != null -> item.text.toString()
-                item.uri != null -> getBase64FromUri(item.uri)
-                else -> null
-            }
-        }
-
-        if (currentClipData != null && currentClipData != lastClipData) {
-            lastClipData = currentClipData
-            gotNewData(currentClipData)
-        }
-    }
-
-    private fun getBase64FromUri(uri: Uri): String? {
-        return try {
-            val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
-            inputStream?.buffered()?.use {
-                Base64.encodeToString(it.readBytes(), Base64.DEFAULT)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
 
     fun addDataToClipboard(data: String, type: String, deviceName:String? = "Remote") {
-        Timber.tag(CHANDLER_TAG).i("Adding clipboard data: $data")
-        isAddingData = true
-
+        Timber.tag(CHANDLER_TAG).i("Updating clipboard")
         val clip: ClipData = when (type) {
             "txt" -> ClipData.newPlainText("text", data)
             "img" -> {
@@ -84,8 +49,6 @@ class ClipboardHandler  @Inject constructor(@ApplicationContext private val cont
         }
 
         clipboardManager.setPrimaryClip(clip)
-        lastClipData = clipboardManager.primaryClip?.getItemAt(0)?.text?.toString()
-        isAddingData = false
     }
 
     private fun saveImageToMediaStore(context: Context, bitmap: Bitmap): Uri? {
@@ -125,9 +88,5 @@ class ClipboardHandler  @Inject constructor(@ApplicationContext private val cont
             Timber.tag(CHANDLER_TAG).e(e, "Error decoding base64 image")
             false
         }
-    }
-    private fun gotNewData(data: String) {
-        // Handle the new clipboard data here
-        Timber.tag(CHANDLER_TAG).i("New clipboard data: $data")
     }
 }

@@ -1,30 +1,10 @@
 package com.local.passover.utils
 
-import android.Manifest
-import android.os.Build
 import java.util.UUID
 
 val L2CAP_SERVICE_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB") // Generic SPP UUID
 val uuidBTClassic: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 const val PREFERENCES_NAME = "passover_preferences"
-
-////Since the permissions needed for this app are fixed we define them here
-val requiredPermissionsInitialClient =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        arrayOf(
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_ADVERTISE,
-        )
-    } else {
-        arrayOf(
-            Manifest.permission.BLUETOOTH,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        )
-    }
-
-
 
 
 val appNameToPackageName = mapOf(

@@ -2,6 +2,7 @@ package com.local.passover.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
@@ -20,12 +21,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Button
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,21 +43,30 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.LifecycleOwner
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.BarcodeScanning.getClient
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import com.local.passover.core.QRScannerState
+import com.local.passover.core.QRScannerViewModel
 import timber.log.Timber
 
 @kotlin.OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QRScannerScreen(onNavigateUp: () -> Unit){
+fun QRScannerScreen(
+    onNavigateUp: () -> Unit,
+    viewModel: QRScannerViewModel = hiltViewModel()
+){
     val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsState()
 
     var hasPermission by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
@@ -67,16 +80,46 @@ fun QRScannerScreen(onNavigateUp: () -> Unit){
         if(!hasPermission)permissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
+    LaunchedEffect(uiState) {
+        if(uiState is QRScannerState.Success){
+            Toast.makeText(context, "Connected and saved!", Toast.LENGTH_LONG).show()
+            onNavigateUp()
+        }
+    }
+
     Scaffold(topBar = {
         TopAppBar(title = {Text("Scan QR", fontWeight = FontWeight.Bold, color= Color.White)})
     }) { paddingValues ->
         if(hasPermission){
             SimpleQrScanner(
                 modifier = Modifier.fillMaxSize().padding(paddingValues),
+                isEnabled = uiState is QRScannerState.Scanning,
                 onQrFound =  { qrValue ->
                     Timber.tag("QRScanner").i( "QR found: $qrValue")
+                    viewModel.processQRCode(qrValue)
                 }
             )
+
+            when(val state = uiState){
+                is QRScannerState.Loading -> {
+                    CircularProgressIndicator()
+                }
+                is QRScannerState.Error -> {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(state.message, color = Color.White, textAlign = TextAlign.Center)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = { viewModel.resetScanner() }) {
+                            Text("Retry")
+                        }
+                    }
+                }
+                else -> {
+
+                }
+            }
+
         } else{
             Column(
                 modifier = Modifier
@@ -97,7 +140,25 @@ fun QRScannerScreen(onNavigateUp: () -> Unit){
 
 @OptIn(ExperimentalGetImage::class)
 @Composable
-fun SimpleQrScanner(modifier: Modifier = Modifier, onQrFound: (String) -> Unit) {
+fun SimpleQrScanner(
+    modifier: Modifier = Modifier,
+    isEnabled: Boolean,
+    onQrFound: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val scanner = remember {
+        val options = BarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .build()
+        BarcodeScanning.getClient(options)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            scanner.close()
+        }
+    }
+
     Box(modifier = modifier) {
         AndroidView(
             factory = { ctx ->
@@ -106,10 +167,10 @@ fun SimpleQrScanner(modifier: Modifier = Modifier, onQrFound: (String) -> Unit) 
                 cameraProviderFuture.addListener({
                     val cameraProvider = cameraProviderFuture.get()
                     val preview = Preview.Builder().build().also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
+                        it.surfaceProvider = previewView.surfaceProvider
                     }
                     val options = BarcodeScannerOptions.Builder()
-                        .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                        .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS)
                         .build()
                     val scanner = getClient(options)
                     val analysis = ImageAnalysis.Builder()
@@ -117,10 +178,15 @@ fun SimpleQrScanner(modifier: Modifier = Modifier, onQrFound: (String) -> Unit) 
                         .build()
                         .also {
                             it.setAnalyzer(ContextCompat.getMainExecutor(ctx)) { imageProxy ->
+                                if(!isEnabled){
+                                    imageProxy.close()
+                                    return@setAnalyzer
+                                }
                                 val mediaImage = imageProxy.image
                                 if (mediaImage != null) {
                                     val image = InputImage.fromMediaImage(mediaImage,
                                         imageProxy.imageInfo.rotationDegrees)
+
                                     scanner.process(image)
                                         .addOnSuccessListener { barcodes ->
                                             barcodes.firstOrNull()?.rawValue?.let { value ->

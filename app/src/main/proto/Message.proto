@@ -1,79 +1,106 @@
 syntax = "proto3";
 
-import "google/protobuf/timestamp.proto";
 package com.local.passover;
 
-enum MessageType {
-  CLIPBOARD = 0;
-  GRAPHICS = 1;
-  MEDIADATA = 2;
-  METADATA = 3;
-  NOTIFICATION = 4;
-  REMOTE = 5;
-  TRANSPORTMANAGER = 6;
+message Message{
+  int64 timestamp_ms = 1;
+
+  oneof payload{
+    ClipboardMessage clipboard = 2;
+    MediaControlMessage mediaControl = 3;
+    MediaPlaybackInfo playbackInfo = 4;
+
+    FileHeader fileHeader = 5;
+    FileChunk fileChunk = 6;
+    FileStatusRequest statusRequest = 7;
+    FileStatusResponse statusResponse = 8;
+    FileTransferError error = 9;
+
+    VideoStreamChunk videoChunk = 10;
+    MediaArt artwork = 11;
+    Heartbeat heartbeat = 12;
+    Identity identity = 13;
+    QRPayload qrPayload = 14;
+  }
 }
 
-message ClipBoard{
-  string text = 1;
-  string timestamp = 2;
-  string origin = 3;
+message Identity{
+  string deviceId = 1;
 }
 
-message Graphic{
-  bytes data = 1;
-  int32 seq = 2;
+message QRPayload{
+  string deviceId = 1;
+  string key = 2;
 }
 
-message MetaData{
-  int32 size = 1;
-  string type = 2;
-  google.protobuf.Timestamp created = 3;
-  google.protobuf.Timestamp modified = 4;
+message ClipboardMessage{
+  string content = 1;
+  enum ClipboardContentType{
+    TXT = 0;
+    IMG = 1;
+  }
+  ClipboardContentType type = 2;
 }
 
-message MediaData{
+message MediaControlMessage{
+  enum Action{
+    PLAY_PAUSE = 0;
+    NEXT = 1;
+    PREVIOUS = 2;
+    VOLUME_SET = 3;
+  }
+  Action action = 1;
+  float volume = 2;
+}
+
+message MediaArt{
+  bytes content = 1;
+}
+
+message MediaPlaybackInfo{
   bool playbackRate = 1;
   double duration = 2;
   double elapsed = 3;
-  float volume = 4;
+  string title = 4;
   string album = 5;
   string artist = 6;
   string bundle = 7;
-  string title = 8;
-  int32 artworkSize = 9;
-  google.protobuf.Timestamp timestamp = 10;
+  float volume = 8;
 }
 
-message NotificationData{
-  string appName = 1;
-  string body = 2;
-  string profile = 3;
-  string title = 4;
-}
-
-message RemoteData{
-  string event = 1;
-  string extraData = 2;
-}
-
-message TransportManager{
-  string id = 1;
+message FileHeader{
+  string fileId = 1;
   string filename = 2;
-  MetaData metadata = 3;
-  string fileURL = 4;
-  bool isWifiTransfer = 5;
+  int64 filesizeBytes = 3;
+  bytes metadata = 4;
 }
 
-message BPacket{
-  MessageType type = 1;
+message FileChunk{
+  string fileId = 1;
+  int64 offset = 2;
+  bytes data = 3;
+}
 
-  oneof data {
-    ClipBoard clipboard = 2;
-    Graphic graphic = 3;
-    MediaData mediaData = 4;
-    NotificationData notificationData = 5;
-    RemoteData remoteData = 6;
-    MetaData metadata = 7;
-    TransportManager transportManager = 8;
-  }
+message FileStatusRequest{
+  string fileId = 1;
+}
+
+message FileStatusResponse{
+  string fileId = 1;
+  int64 bytesRecieved = 2;
+}
+
+message FileTransferError{
+  string fileId = 1;
+  string error = 2;
+}
+
+message Heartbeat{
+  bool isMediaPlaying = 1;
+  bool isMacUserActive = 2;
+}
+
+message VideoStreamChunk{
+  bytes frame = 1;
+  int64 presentationTimestampUs = 2;
 }

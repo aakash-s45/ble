@@ -3,10 +3,16 @@ package com.local.passover.clipboard
 import android.content.ClipboardManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import com.local.passover.classes.PacketManager
+import androidx.lifecycle.lifecycleScope
+import com.local.passover.MessageOuterClass
+import com.local.passover.core.ConnectionRepository
+import kotlinx.coroutines.launch
 import timber.log.Timber
+import javax.inject.Inject
 
 class ClipboardActivity : ComponentActivity() {
+    @Inject lateinit var connectionRepo: ConnectionRepository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
     }
@@ -21,10 +27,23 @@ class ClipboardActivity : ComponentActivity() {
             ?.getItemAt(0)
             ?.coerceToText(this)
             ?.toString()
-            ?: "<empty>"
+            ?: ""
 
-        Timber.tag("ClipboardActivity").d("📑 Clipboard now contains: “$text”")
-        PacketManager.sendClipboard(text)
+        Timber.tag("ClipboardActivity").d("Clipboard text: “$text”")
+        lifecycleScope.launch {
+            sendClipboardData(text)
+        }
         finish()
+    }
+
+    private fun sendClipboardData(text: String){
+        val data = MessageOuterClass
+            .ClipboardMessage
+            .newBuilder()
+            .setType(MessageOuterClass.ClipboardMessage.ClipboardContentType.TXT)
+            .setContent(text)
+            .build().toByteArray()
+
+        connectionRepo.send(data)
     }
 }
