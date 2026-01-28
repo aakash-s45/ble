@@ -1,13 +1,12 @@
-package com.local.passover.clipboard
+package com.local.passover.services
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
-import com.local.passover.services.MainService
+import com.local.passover.clipboard.ClipboardActivity
 import timber.log.Timber
-
 
 @SuppressLint("AccessibilityPolicy")
 class ClipboardMonitor : AccessibilityService() {
@@ -29,18 +28,19 @@ class ClipboardMonitor : AccessibilityService() {
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
         }
 
-        Timber.tag(CMON_TAG).d( "Service Connected")
+        Timber.Forest.tag(CMON_TAG).d( "Service Connected")
     }
 
 
     @SuppressLint("SwitchIntDef")
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         var shouldTrigger = false
+//        TODO: Update currentFocusedApp on TYPE_WINDOW_STATE_CHANGED events as well
         when (event.eventType) {
             AccessibilityEvent.TYPE_VIEW_LONG_CLICKED -> {
                 updateCurrentAppName(event)
                 if(launchReaderOnLongPress.contains(currentFocusedApp)){
-                    Timber.tag(CMON_TAG).d( "Detected long press on configured app")
+                    Timber.Forest.tag(CMON_TAG).d( "Detected long press on configured app")
                     launchClipboardActivity()
                 }
             }
@@ -52,7 +52,7 @@ class ClipboardMonitor : AccessibilityService() {
                 val labelMatches = event.text.any { it.toString().contains("copy", ignoreCase = true) || it.toString().contains("cut", ignoreCase = true) }
 
                 if (desc.contains("copy", true) || labelMatches) {
-                    Timber.tag(CMON_TAG).d( "Detected copy/cut tap")
+                    Timber.Forest.tag(CMON_TAG).d( "Detected copy/cut tap")
                     launchClipboardActivity()
                 }
             }
@@ -61,7 +61,7 @@ class ClipboardMonitor : AccessibilityService() {
                 // Catch toasts like “Link copied to clipboard”
                 event.text.forEach { t ->
                     if (t.toString().contains("copied", ignoreCase = true)) {
-                        Timber.tag(CMON_TAG).d( "Detected copy related toast")
+                        Timber.Forest.tag(CMON_TAG).d( "Detected copy related toast")
                         launchClipboardActivity()
                         return
                     }
@@ -85,9 +85,11 @@ class ClipboardMonitor : AccessibilityService() {
 
     private fun launchClipboardActivity() {
         val intent = Intent(this, ClipboardActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+            .addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK
                     or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                    or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                    or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                    or Intent.FLAG_ACTIVITY_NO_ANIMATION)
         startActivity(intent)
     }
 

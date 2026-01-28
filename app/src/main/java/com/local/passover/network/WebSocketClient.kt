@@ -16,9 +16,9 @@ class WebSocketClient @Inject constructor(
     private val okHttpClient: OkHttpClient
 ){
     private var webSocket: WebSocket? = null
-    private val _messages = MutableSharedFlow<ByteString>()
+    private val _messages = MutableSharedFlow<ByteString>(replay = 1, extraBufferCapacity = 64)
     val messages = _messages.asSharedFlow()
-    private val _connectionState = MutableSharedFlow<Boolean>()
+    private val _connectionState = MutableSharedFlow<Boolean>(replay = 1)
     val  connectionState = _connectionState.asSharedFlow()
 
     private val listener = object : WebSocketListener(){
@@ -52,5 +52,6 @@ class WebSocketClient @Inject constructor(
     fun disconnect(code: Int = 1000, reason: String = "Client disconnected"){
         webSocket?.close(code, reason)
         webSocket = null
+        _connectionState.tryEmit(false)
     }
 }

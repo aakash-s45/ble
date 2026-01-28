@@ -30,7 +30,7 @@ okhttp = "5.3.0"
 security-crypto = "1.1.0"
 lifecycle-service = "2.9.4"
 kotlin-compiler-extension = "1.5.13"
-protoc = "3.14.0"
+protoc = "3.21.5"
 compose-compiler = "2.2.21"
 
 [libraries]

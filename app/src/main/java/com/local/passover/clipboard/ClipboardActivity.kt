@@ -6,10 +6,12 @@ import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.local.passover.MessageOuterClass
 import com.local.passover.core.ConnectionRepository
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
+@AndroidEntryPoint
 class ClipboardActivity : ComponentActivity() {
     @Inject lateinit var connectionRepo: ConnectionRepository
 
@@ -34,16 +36,22 @@ class ClipboardActivity : ComponentActivity() {
             sendClipboardData(text)
         }
         finish()
+
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
+        } else {
+            overridePendingTransition(0, 0)
+        }
     }
 
     private fun sendClipboardData(text: String){
-        val data = MessageOuterClass
-            .ClipboardMessage
-            .newBuilder()
+        val clipboardMessage = MessageOuterClass.ClipboardMessage.newBuilder()
             .setType(MessageOuterClass.ClipboardMessage.ClipboardContentType.TXT)
-            .setContent(text)
-            .build().toByteArray()
-
-        connectionRepo.send(data)
+            .setContent(text).build()
+        val wrapperMessage = MessageOuterClass.Message.newBuilder()
+            .setTimestampMs(System.currentTimeMillis())
+            .setClipboard(clipboardMessage)
+            .build()
+        connectionRepo.send(wrapperMessage.toByteArray())
     }
 }

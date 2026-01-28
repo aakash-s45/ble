@@ -25,6 +25,8 @@ class KeystoreManager @Inject constructor(
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val AES_MODE = "AES/GCM/NoPadding"
         private const val GCM_TAG_LENGTH = 128
+        private const val IV_SIZE = 12
+        private const val MASTER_KEY_ALIAS = "passover_master_key"
     }
 
     private val keyStore: KeyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
@@ -42,6 +44,28 @@ class KeystoreManager @Inject constructor(
         keyGenerator.init(spec)
         keyGenerator.generateKey()
         return true
+    }
+
+    fun getOrGenerateMasterKey(): Boolean{
+        if(!keyExists(MASTER_KEY_ALIAS)){
+            return generateAedKey(MASTER_KEY_ALIAS)
+        }
+        return true
+    }
+
+    fun wrapKey(secretKey: String): String{
+        removeKey(MASTER_KEY_ALIAS)
+        getOrGenerateMasterKey()
+        val keyBytes = Base64.decode(secretKey, Base64.DEFAULT)
+        val encryptedKeyBytes =  encrypt(MASTER_KEY_ALIAS, keyBytes)
+        return Base64.encodeToString(encryptedKeyBytes, Base64.DEFAULT)
+    }
+
+    fun unwrapKey(wrappedKey: String): SecretKey {
+        val wrappedKeyData = Base64.decode(wrappedKey, Base64.DEFAULT)
+        getOrGenerateMasterKey()
+        val keyBytes =  decrypt(MASTER_KEY_ALIAS, wrappedKeyData)
+        return SecretKeySpec(keyBytes, 0, keyBytes.size, "AES")
     }
 
     fun keyExists(alias: String): Boolean {
@@ -78,10 +102,11 @@ class KeystoreManager @Inject constructor(
         try {
             val cipher = Cipher.getInstance(AES_MODE)
             cipher.init(Cipher.ENCRYPT_MODE, key)
+
             val iv = cipher.iv ?: throw IllegalStateException("IV is null")
             val encryptedData = cipher.doFinal(data)
-            val buffer = ByteBuffer.allocate(4 + iv.size + encryptedData.size)
-            buffer.putInt(iv.size)
+
+            val buffer = ByteBuffer.allocate(iv.size + encryptedData.size)
             buffer.put(iv)
             buffer.put(encryptedData)
             return buffer.array()
@@ -98,16 +123,15 @@ class KeystoreManager @Inject constructor(
 
     fun decrypt(key: SecretKey, data: ByteArray): ByteArray {
         try {
-            val buffer = ByteBuffer.wrap(data)
-            val ivLength = buffer.int
-            if (ivLength <=0 || ivLength > 1024)throw  IllegalArgumentException("Invalid IV length")
-            val iv = ByteArray(ivLength)
-            buffer.get(iv)
+            if (data.size < IV_SIZE) throw IllegalArgumentException("Invalid data length")
+            val iv = data.copyOfRange(0, IV_SIZE)
 
+            val cipherText = data.copyOfRange(IV_SIZE, data.size)
             val cipher = Cipher.getInstance(AES_MODE)
             val spec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
             cipher.init(Cipher.DECRYPT_MODE, key, spec)
-            return cipher.doFinal(buffer.array())
+
+            return cipher.doFinal(cipherText)
         }catch (t: Throwable){
             Timber.tag(TAG).e("Failed to decrypt data: $t")
             throw t
@@ -117,6 +141,10 @@ class KeystoreManager @Inject constructor(
     fun getKey(alias: String): SecretKey?{
         val key = keyStore.getKey(alias, null)?: return null
         return key as? SecretKey
+    }
+
+    fun saveKey(){
+
     }
 
 }

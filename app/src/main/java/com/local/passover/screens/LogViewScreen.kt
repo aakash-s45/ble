@@ -38,7 +38,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.local.passover.classes.LogViewerViewModel
+import com.local.passover.viewmodels.LogViewerViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

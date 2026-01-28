@@ -1,4 +1,4 @@
-package com.local.passover.clipboard
+package com.local.passover.core
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -10,22 +10,22 @@ import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
+import com.local.passover.MessageOuterClass
 import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
-
 @Singleton
 class ClipboardHandler  @Inject constructor(@param:ApplicationContext private val context: Context) {
     private val CHANDLER_TAG = "ClipboardHandler"
     private val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-
-    fun addDataToClipboard(data: String, type: String, deviceName:String? = "Remote") {
-        Timber.tag(CHANDLER_TAG).i("Updating clipboard")
+    private fun addDataToClipboard(data: String, type: MessageOuterClass.ClipboardMessage.ClipboardContentType, deviceName:String? = "Remote") {
+        Timber.Forest.tag(CHANDLER_TAG).i("Updating clipboard")
         val clip: ClipData = when (type) {
-            "txt" -> ClipData.newPlainText("text", data)
-            "img" -> {
+            MessageOuterClass.ClipboardMessage.ClipboardContentType.TXT ->
+                ClipData.newPlainText("text", data)
+            MessageOuterClass.ClipboardMessage.ClipboardContentType.IMG -> {
                 if (isValidBase64Image(data)) {
                     val decodedBytes = Base64.decode(data, Base64.DEFAULT)
                     val bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
@@ -34,16 +34,16 @@ class ClipboardHandler  @Inject constructor(@param:ApplicationContext private va
                         ClipData.newUri(context.contentResolver, "from $deviceName", imageUri)
                     }
                     else{
-                        Timber.tag(CHANDLER_TAG).w("image uri data null")
+                        Timber.Forest.tag(CHANDLER_TAG).w("image uri data null")
                         return
                     }
                 } else {
-                    Timber.tag(CHANDLER_TAG).w("Invalid base64 image data")
+                    Timber.Forest.tag(CHANDLER_TAG).w("Invalid base64 image data")
                     return
                 }
             }
             else -> {
-                Timber.tag(CHANDLER_TAG).w("Unsupported type: $type")
+                Timber.Forest.tag(CHANDLER_TAG).w("Unsupported type: $type")
                 return
             }
         }
@@ -51,7 +51,12 @@ class ClipboardHandler  @Inject constructor(@param:ApplicationContext private va
         clipboardManager.setPrimaryClip(clip)
     }
 
+    fun updateClipboard(message: MessageOuterClass.ClipboardMessage){
+        addDataToClipboard(message.content, message.type)
+    }
+
     private fun saveImageToMediaStore(context: Context, bitmap: Bitmap): Uri? {
+        // TODO: Save to context.cacheDir or a hidden app-specific directory unless the user explicitly saves it.
         val contentResolver = context.contentResolver
         val contentValues = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, "Clipboard_Image_${System.currentTimeMillis()}.png")
@@ -82,11 +87,12 @@ class ClipboardHandler  @Inject constructor(@param:ApplicationContext private va
             val bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
             bitmap != null
         } catch (e: IllegalArgumentException) {
-            Timber.tag(CHANDLER_TAG).e(e, "Invalid base64 string")
+            Timber.Forest.tag(CHANDLER_TAG).e(e, "Invalid base64 string")
             false
         } catch (e: Exception) {
-            Timber.tag(CHANDLER_TAG).e(e, "Error decoding base64 image")
+            Timber.Forest.tag(CHANDLER_TAG).e(e, "Error decoding base64 image")
             false
         }
     }
+
 }

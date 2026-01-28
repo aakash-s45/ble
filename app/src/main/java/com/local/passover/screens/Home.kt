@@ -1,6 +1,8 @@
 package com.local.passover.screens
 
 import android.app.Activity
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,6 +16,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,10 +25,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.local.passover.services.ClipboardMonitor
+import com.local.passover.core.ConnectionState
+import com.local.passover.viewmodels.FirstPageViewModel
+import com.local.passover.utils.isAccessibilityServiceRunning
 
 @Composable
 fun Home(activity: Activity) {
@@ -64,12 +76,29 @@ fun Home(activity: Activity) {
 @Composable
 fun FirstPage(navController: NavController, activity: Activity) {
     val context = LocalContext.current
+    val viewModel: FirstPageViewModel = hiltViewModel()
 //    val viewModel: AppViewModel = hiltViewModel()
 //    val isServiceRunning by viewModel.isServiceRunning.collectAsState()
 //    val status by BluetoothL2capManager.status.collectAsState()
 //    val currentClient by BluetoothL2capManager.currentClient.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val connectionState by viewModel.connectionState.collectAsState()
+    val hasCredentials by viewModel.hasCredentials.collectAsState(false)
 
-    var text by remember { mutableStateOf("Hello") }
+    var isServiceRunning by remember {
+        mutableStateOf(isAccessibilityServiceRunning(context, ClipboardMonitor::class.java))
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isServiceRunning =
+                    isAccessibilityServiceRunning(context, ClipboardMonitor::class.java)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Scaffold(
         topBar = {
@@ -98,6 +127,16 @@ fun FirstPage(navController: NavController, activity: Activity) {
                             "⚠️ This is necessary for the app to interact with system UI.",
                     style = MaterialTheme.typography.bodyMedium
                 )
+                if (!isServiceRunning) {
+                    Button(
+                        onClick = {
+                            activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Open Accessibility Settings")
+                    }
+                }
 //                Button(onClick = {
 //                    NetworkManager.findMacServer()
 //                }){
@@ -160,13 +199,25 @@ fun FirstPage(navController: NavController, activity: Activity) {
                 ) {
                     Text("View Logs")
                 }
-                Button(
-                    onClick = {
-                        navController.navigate("scanQR")
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Scan QR")
+                if(isServiceRunning && connectionState != ConnectionState.CONNECTED && connectionState != ConnectionState.CONNECTING){
+                    Button(
+                        onClick = {
+                            navController.navigate("scanQR")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Scan QR")
+                    }
+                }
+                if(hasCredentials){
+                    Button(
+                        onClick = {
+                            viewModel.removeSavedCredentials()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Remove Saved Credentials")
+                    }
                 }
             }
         }

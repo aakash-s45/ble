@@ -55,8 +55,8 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.BarcodeScanning.getClient
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
-import com.local.passover.core.QRScannerState
-import com.local.passover.core.QRScannerViewModel
+import com.local.passover.viewmodels.QRScannerState
+import com.local.passover.viewmodels.QRScannerViewModel
 import timber.log.Timber
 
 @kotlin.OptIn(ExperimentalMaterial3Api::class)
@@ -91,15 +91,6 @@ fun QRScannerScreen(
         TopAppBar(title = {Text("Scan QR", fontWeight = FontWeight.Bold, color= Color.White)})
     }) { paddingValues ->
         if(hasPermission){
-            SimpleQrScanner(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
-                isEnabled = uiState is QRScannerState.Scanning,
-                onQrFound =  { qrValue ->
-                    Timber.tag("QRScanner").i( "QR found: $qrValue")
-                    viewModel.processQRCode(qrValue)
-                }
-            )
-
             when(val state = uiState){
                 is QRScannerState.Loading -> {
                     CircularProgressIndicator()
@@ -115,8 +106,22 @@ fun QRScannerScreen(
                         }
                     }
                 }
+                is QRScannerState.Scanning -> {
+                    SimpleQrScanner(
+                        modifier = Modifier.fillMaxSize().padding(paddingValues),
+                        isEnabled = uiState is QRScannerState.Scanning,
+                        onQrFound =  { qrValue ->
+                            Timber.tag("QRScanner").i( "QR found: $qrValue")
+                            viewModel.processQRCode(qrValue)
+                        }
+                    )
+                }
                 else -> {
-
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("What's Up!")
+                    }
                 }
             }
 
@@ -166,6 +171,7 @@ fun SimpleQrScanner(
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                 cameraProviderFuture.addListener({
                     val cameraProvider = cameraProviderFuture.get()
+
                     val preview = Preview.Builder().build().also {
                         it.surfaceProvider = previewView.surfaceProvider
                     }
@@ -173,12 +179,14 @@ fun SimpleQrScanner(
                         .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS)
                         .build()
                     val scanner = getClient(options)
+                    var hasFoundCode = false
+
                     val analysis = ImageAnalysis.Builder()
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
                         .also {
                             it.setAnalyzer(ContextCompat.getMainExecutor(ctx)) { imageProxy ->
-                                if(!isEnabled){
+                                if(!isEnabled || hasFoundCode){
                                     imageProxy.close()
                                     return@setAnalyzer
                                 }
@@ -190,6 +198,7 @@ fun SimpleQrScanner(
                                     scanner.process(image)
                                         .addOnSuccessListener { barcodes ->
                                             barcodes.firstOrNull()?.rawValue?.let { value ->
+                                                hasFoundCode = true
                                                 onQrFound(value)
                                             }
                                         }

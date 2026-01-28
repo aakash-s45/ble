@@ -95,12 +95,8 @@ dependencies {
 
 protobuf {
     protoc {
-        // for apple m1, add protoc_platform=osx-x86_64 in $HOME/.gradle/gradle.properties
-        if (project.hasProperty('protoc_platform')) {
-            artifact = libs.protoc.get().toString() + ":${protoc_platform}"
-        } else {
-            artifact = libs.protoc.get().toString()
-        }
+
+        artifact = libs.protoc.get().toString()
     }
 
     generateProtoTasks {

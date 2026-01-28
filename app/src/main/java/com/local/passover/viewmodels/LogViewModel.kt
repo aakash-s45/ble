@@ -1,4 +1,4 @@
-package com.local.passover.classes
+package com.local.passover.viewmodels
 
 import android.content.ContentValues
 import android.content.Context
