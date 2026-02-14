@@ -176,4 +176,28 @@
 //    fun cleanup() {
 //        coroutineScope.cancel()
 //    }
+//}/            }
+//
+//            if (tempFile.exists() && tempFile.length() > 0) {
+//                Timber.tag(SSMON_TAG).d("File copied successfully: ${tempFile.path}")
+//                tempFile
+//            } else {
+//                Timber.tag(SSMON_TAG).w("File copied but is empty or doesn't exist")
+//                tempFile.delete()
+//                null
+//            }
+//        } catch (e: Exception) {
+//            Timber.tag(SSMON_TAG).e(e, "Failed to copy URI to temp file")
+//            null
+//        }
+//    }
+//
+//    private fun getFileExtension(fileName: String): String? {
+//        return fileName.substringAfterLast('.', "").takeIf { it.isNotEmpty() }
+//    }
+//
+//
+//    fun cleanup() {
+//        coroutineScope.cancel()
+//    }
 //}

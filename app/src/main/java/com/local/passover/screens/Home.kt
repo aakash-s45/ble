@@ -33,7 +33,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.local.passover.services.ClipboardMonitor
+import com.local.passover.services.PassoverAccessibilityService
 import com.local.passover.core.ConnectionState
 import com.local.passover.viewmodels.FirstPageViewModel
 import com.local.passover.utils.isAccessibilityServiceRunning
@@ -86,14 +86,14 @@ fun FirstPage(navController: NavController, activity: Activity) {
     val hasCredentials by viewModel.hasCredentials.collectAsState(false)
 
     var isServiceRunning by remember {
-        mutableStateOf(isAccessibilityServiceRunning(context, ClipboardMonitor::class.java))
+        mutableStateOf(isAccessibilityServiceRunning(context, PassoverAccessibilityService::class.java))
     }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 isServiceRunning =
-                    isAccessibilityServiceRunning(context, ClipboardMonitor::class.java)
+                    isAccessibilityServiceRunning(context, PassoverAccessibilityService::class.java)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

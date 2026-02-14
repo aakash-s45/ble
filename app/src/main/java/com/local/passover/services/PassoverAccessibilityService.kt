@@ -3,16 +3,34 @@ package com.local.passover.services
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.view.accessibility.AccessibilityEvent
 import com.local.passover.clipboard.ClipboardActivity
 import timber.log.Timber
 
 @SuppressLint("AccessibilityPolicy")
-class ClipboardMonitor : AccessibilityService() {
-    private val CMON_TAG = "ClipboardMonitor"
+class PassoverAccessibilityService : AccessibilityService() {
+    private val TAG = "PassoverAccessibilityService"
     private var currentFocusedApp: String = ""
     val launchReaderOnLongPress = setOf("com.google.android.apps.authenticator2")
+
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    Timber.tag(TAG).d("Screen OFF — pausing sync")
+                    sendMainServiceAction(MainService.ACTION_PAUSE)
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    Timber.tag(TAG).d("Screen ON — resuming sync")
+                    sendMainServiceAction(MainService.ACTION_RESUME)
+                }
+            }
+        }
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -28,19 +46,24 @@ class ClipboardMonitor : AccessibilityService() {
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
         }
 
-        Timber.Forest.tag(CMON_TAG).d( "Service Connected")
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        registerReceiver(screenReceiver, filter)
+
+        Timber.Forest.tag(TAG).d("Service Connected")
     }
 
 
     @SuppressLint("SwitchIntDef")
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        var shouldTrigger = false
 //        TODO: Update currentFocusedApp on TYPE_WINDOW_STATE_CHANGED events as well
         when (event.eventType) {
             AccessibilityEvent.TYPE_VIEW_LONG_CLICKED -> {
                 updateCurrentAppName(event)
                 if(launchReaderOnLongPress.contains(currentFocusedApp)){
-                    Timber.Forest.tag(CMON_TAG).d( "Detected long press on configured app")
+                    Timber.Forest.tag(TAG).d( "Detected long press on configured app")
                     launchClipboardActivity()
                 }
             }
@@ -48,20 +71,20 @@ class ClipboardMonitor : AccessibilityService() {
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
                 val desc = event.contentDescription?.toString() ?: ""
 
-                //check the event.text list for any “copy” or "cut" labels
+                //check the event.text list for any "copy" or "cut" labels
                 val labelMatches = event.text.any { it.toString().contains("copy", ignoreCase = true) || it.toString().contains("cut", ignoreCase = true) }
 
                 if (desc.contains("copy", true) || labelMatches) {
-                    Timber.Forest.tag(CMON_TAG).d( "Detected copy/cut tap")
+                    Timber.Forest.tag(TAG).d( "Detected copy/cut tap")
                     launchClipboardActivity()
                 }
             }
 
             AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED -> {
-                // Catch toasts like “Link copied to clipboard”
+                // Catch toasts like "Link copied to clipboard"
                 event.text.forEach { t ->
                     if (t.toString().contains("copied", ignoreCase = true)) {
-                        Timber.Forest.tag(CMON_TAG).d( "Detected copy related toast")
+                        Timber.Forest.tag(TAG).d( "Detected copy related toast")
                         launchClipboardActivity()
                         return
                     }
@@ -82,6 +105,12 @@ class ClipboardMonitor : AccessibilityService() {
         startForegroundService(intent)
     }
 
+    private fun sendMainServiceAction(action: String) {
+        val intent = Intent(applicationContext, MainService::class.java).apply {
+            this.action = action
+        }
+        startForegroundService(intent)
+    }
 
     private fun launchClipboardActivity() {
         val intent = Intent(this, ClipboardActivity::class.java)
@@ -93,5 +122,12 @@ class ClipboardMonitor : AccessibilityService() {
         startActivity(intent)
     }
 
-    override fun onInterrupt() { /* nothing */ }
+    override fun onInterrupt() {
+        try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
+    }
 }
