@@ -53,6 +53,7 @@ class QRScannerViewModel @Inject constructor(
 
             if(success){
                 connectionRepository.saveCredentials(qrData.deviceId, qrData.key)
+                _uiState.value = QRScannerState.Success
             } else{
                 Timber.tag(TAG).e("Failed to connect")
                 _uiState.value = QRScannerState.Error("Failed to connect")

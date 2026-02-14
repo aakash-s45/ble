@@ -4,6 +4,7 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,6 +17,7 @@ class DnsServiceManager @Inject constructor(
     private val TAG = "DnsServiceManager"
     private val serviceType = "_passover._tcp"
     private val serviceName = "Passover"
+    private val DISCOVERY_TIMEOUT_MS = 15_000L
 
     private fun stopDiscoverySafe(listener: NsdManager.DiscoveryListener?) {
         try {
@@ -24,51 +26,66 @@ class DnsServiceManager @Inject constructor(
             Timber.tag(TAG).e(e, "Listener error: ")
         }
     }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     suspend fun findService(deviceId: String): NsdServiceInfo? =
-        suspendCancellableCoroutine {continuation ->
+        withTimeoutOrNull(DISCOVERY_TIMEOUT_MS) {
+        suspendCancellableCoroutine { continuation ->
             var discoveryListener: NsdManager.DiscoveryListener? = null
-
             val resumeLock = Any()
             var isResumed = false
+            var isResolving = false
+            val pendingServices = mutableListOf<NsdServiceInfo>()
 
             val resolveListener = object : NsdManager.ResolveListener {
                 override fun onResolveFailed(service: NsdServiceInfo, errorCode: Int) {
                     Timber.tag(TAG).e("Resolve failed for ${service.serviceName}: $errorCode")
-                    stopDiscoverySafe(discoveryListener)
-                    if (continuation.isActive) continuation.resume(null)
+                    resolveNext()
                 }
                 override fun onServiceResolved(service: NsdServiceInfo) {
                     Timber.tag(TAG).i("Service resolved: $service")
                     val deviceIdBytes = service.attributes["deviceId"]
                     val resolvedId = deviceIdBytes?.let { String(it, Charsets.UTF_8) }
 
-                    if (resolvedId != deviceId){
+                    if (resolvedId != deviceId) {
                         Timber.tag(TAG).d("Ignored service from wrong device: $resolvedId")
+                        resolveNext()
                         return
                     }
 
-                    synchronized(resumeLock){
-                        if(continuation.isActive && !isResumed){
+                    synchronized(resumeLock) {
+                        if (continuation.isActive && !isResumed) {
                             isResumed = true
                             stopDiscoverySafe(discoveryListener)
                             continuation.resume(service)
                         }
                     }
                 }
+
+                private fun resolveNext() {
+                    synchronized(resumeLock) {
+                        if (isResumed) return
+                        val next = pendingServices.removeFirstOrNull()
+                        if (next != null) {
+                            nsdManager.resolveService(next, this)
+                        } else {
+                            isResolving = false
+                        }
+                    }
+                }
             }
 
-            discoveryListener = object : NsdManager.DiscoveryListener{
+            discoveryListener = object : NsdManager.DiscoveryListener {
                 override fun onDiscoveryStarted(serviceType: String) {
-                    Timber.tag(TAG).i( "Discovery started: $serviceType")
+                    Timber.tag(TAG).i("Discovery started: $serviceType")
                 }
                 override fun onDiscoveryStopped(serviceType: String) {
                     Timber.tag(TAG).i("Discovery stopped: $serviceType")
                 }
                 override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
                     Timber.tag(TAG).d("Start discovery failed: $errorCode")
-                    synchronized(resumeLock){
-                        if (continuation.isActive && !isResumed){
+                    synchronized(resumeLock) {
+                        if (continuation.isActive && !isResumed) {
                             isResumed = true
                             continuation.resume(null)
                         }
@@ -82,8 +99,16 @@ class DnsServiceManager @Inject constructor(
                 }
                 override fun onServiceFound(service: NsdServiceInfo) {
                     Timber.tag(TAG).i("Service found: $service")
-                    if (service.serviceName.contains(serviceName)){
-                        nsdManager.resolveService(service, resolveListener)
+                    if (service.serviceName.contains(serviceName)) {
+                        synchronized(resumeLock) {
+                            if (isResumed) return
+                            if (!isResolving) {
+                                isResolving = true
+                                nsdManager.resolveService(service, resolveListener)
+                            } else {
+                                pendingServices.add(service)
+                            }
+                        }
                     }
                 }
             }
@@ -94,4 +119,5 @@ class DnsServiceManager @Inject constructor(
             }
             nsdManager.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
         }
+    }
 }
