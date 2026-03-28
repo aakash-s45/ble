@@ -9,6 +9,7 @@ import androidx.lifecycle.lifecycleScope
 import com.local.passover.R
 import com.local.passover.core.ClipboardHandler
 import com.local.passover.core.ConnectionRepository
+import com.local.passover.core.TrustedPeerStore
 import com.local.passover.core.ConnectionState
 import com.local.passover.network.WebSocketClient
 import dagger.hilt.android.AndroidEntryPoint
@@ -33,6 +34,7 @@ class MainService: LifecycleService() {
     @Inject lateinit var connectionRepo: ConnectionRepository
     @Inject lateinit var clipboardHandler: ClipboardHandler
     @Inject lateinit var webSocketClient: WebSocketClient
+    @Inject lateinit var trustedPeerStore: TrustedPeerStore
 
     private var reconnectionJob: Job? = null
     private var isPaused = false
@@ -53,8 +55,12 @@ class MainService: LifecycleService() {
                 isPaused = false
                 updateNotification("Keeping device in sync")
                 lifecycleScope.launch {
-                    if (connectionRepo.hasCredentials.first()) {
-                        connectionRepo.connectWithSavedCredentials()
+                    try {
+                        if (connectionRepo.hasTrustedPeers.first()) {
+                            connectToFirstTrustedPeer()
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag(TAG).e(e, "Resume connection failed")
                     }
                 }
             }
@@ -68,13 +74,15 @@ class MainService: LifecycleService() {
         startForeground(NOTIFICATION_ID, createNotification("Keeping device in sync"))
 
         lifecycleScope.launch {
-            connectionRepo.hasCredentials.collect { hasCreds ->
+            connectionRepo.hasTrustedPeers.collect { hasPeers ->
                 if (isPaused) return@collect
-                if(hasCreds){
-                    Timber.tag(TAG).d("Credentials found, connecting")
-                    connectionRepo.connectWithSavedCredentials()
+                if(hasPeers){
+                    Timber.tag(TAG).d("Trusted peer found, connecting")
+                    try { connectToFirstTrustedPeer() } catch (e: Exception) {
+                        Timber.tag(TAG).e(e, "Connection attempt failed")
+                    }
                 } else{
-                    Timber.tag(TAG).d("No credentials found, waiting for connection")
+                    Timber.tag(TAG).d("No trusted peers found, waiting for pairing")
                     connectionRepo.closeConnection()
                 }
             }
@@ -83,11 +91,15 @@ class MainService: LifecycleService() {
         lifecycleScope.launch {
             connectionRepo.connectionState.collect { state ->
                 if (isPaused) return@collect
-                if(state == ConnectionState.FAILED){
-                    Timber.tag(TAG).d("Connection failed, scheduling reconnect")
-                    scheduleReconnection()
-                }else{
-                    reconnectionJob?.cancel()
+                when (state) {
+                    ConnectionState.FAILED -> {
+                        Timber.tag(TAG).d("Connection failed, scheduling reconnect")
+                        scheduleReconnection()
+                    }
+                    ConnectionState.CONNECTED, ConnectionState.IDLE -> {
+                        reconnectionJob?.cancel()
+                    }
+                    else -> { /* DISCOVERING / CONNECTING — let the reconnection job finish */ }
                 }
             }
         }
@@ -111,12 +123,25 @@ class MainService: LifecycleService() {
         if (isPaused) return
         if(reconnectionJob?.isActive == true)return
         reconnectionJob = lifecycleScope.launch {
-            Timber.d("Scheduling reconnect")
-//            TODO: make this delay exponential
+            Timber.tag(TAG).d("Scheduling reconnect in 5s")
             delay(5000)
-            if(connectionRepo.hasCredentials.first()){
-                connectionRepo.connectWithSavedCredentials()
+            try {
+                if(connectionRepo.hasTrustedPeers.first()){
+                    connectToFirstTrustedPeer()
+                }
+            } catch (e: Exception) {
+                Timber.tag(TAG).e(e, "Reconnection attempt failed")
             }
+        }
+    }
+
+    private suspend fun connectToFirstTrustedPeer() {
+        val peers = trustedPeerStore.getAllPeers()
+        val peer = peers.firstOrNull()
+        if (peer != null) {
+            connectionRepo.connectWithTrustedPeer(peer.deviceId)
+        } else {
+            Timber.tag(TAG).d("No trusted peers available to connect")
         }
     }
 

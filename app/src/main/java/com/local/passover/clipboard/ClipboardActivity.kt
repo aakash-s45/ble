@@ -45,13 +45,17 @@ class ClipboardActivity : ComponentActivity() {
     }
 
     private fun sendClipboardData(text: String){
-        val clipboardMessage = MessageOuterClass.ClipboardMessage.newBuilder()
-            .setType(MessageOuterClass.ClipboardMessage.ClipboardContentType.TXT)
-            .setContent(text).build()
-        val wrapperMessage = MessageOuterClass.Message.newBuilder()
-            .setTimestampMs(System.currentTimeMillis())
-            .setClipboard(clipboardMessage)
-            .build()
-        connectionRepo.send(wrapperMessage.toByteArray())
+        try {
+            val clipboardMessage = MessageOuterClass.ClipboardMessage.newBuilder()
+                .setType(MessageOuterClass.ClipboardMessage.ClipboardContentType.TXT)
+                .setContent(text).build()
+            val wrapperMessage = MessageOuterClass.Message.newBuilder()
+                .setTimestampMs(System.currentTimeMillis())
+                .setClipboard(clipboardMessage)
+                .build()
+            connectionRepo.send(wrapperMessage.toByteArray())
+        } catch (e: Exception) {
+            Timber.tag("ClipboardActivity").e(e, "Failed to send clipboard data")
+        }
     }
 }

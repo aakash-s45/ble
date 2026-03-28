@@ -4,6 +4,8 @@ package com.local.passover;
 
 message Message{
   int64 timestamp_ms = 1;
+  string messageId = 15;
+  string originatorId = 16;
 
   oneof payload{
     ClipboardMessage clipboard = 2;
@@ -20,17 +22,20 @@ message Message{
     MediaArt artwork = 11;
     Heartbeat heartbeat = 12;
     Identity identity = 13;
-    QRPayload qrPayload = 14;
+    HandshakeMessage handshake = 14;
   }
 }
 
 message Identity{
   string deviceId = 1;
+  string deviceName = 2;
+  bytes publicKeyAgreement = 3;
+  bytes publicKeySignature = 4;
 }
 
-message QRPayload{
-  string deviceId = 1;
-  string key = 2;
+message HandshakeMessage{
+  bool sasConfirmed = 1;
+  bytes encryptedGroupKey = 2;
 }
 
 message ClipboardMessage{

@@ -21,7 +21,10 @@ class AppModule {
     @Provides
     @Singleton
     fun provideOkHttpClient(): OkHttpClient {
-        return OkHttpClient.Builder().readTimeout(30, TimeUnit.SECONDS).build()
+        return OkHttpClient.Builder()
+            .readTimeout(30, TimeUnit.SECONDS)
+            .pingInterval(15, TimeUnit.SECONDS)
+            .build()
     }
 
     @Provides
@@ -35,6 +38,5 @@ class AppModule {
     @Singleton
     fun provideNsdManager(@ApplicationContext ctx: Context): NsdManager =
         ctx.getSystemService(Context.NSD_SERVICE) as NsdManager
-
 
 }

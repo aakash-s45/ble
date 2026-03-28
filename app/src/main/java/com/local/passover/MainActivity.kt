@@ -10,18 +10,10 @@ import androidx.compose.ui.Modifier
 import com.local.passover.screens.Home
 import com.local.passover.ui.theme.BLEExampleTheme
 import dagger.hilt.android.AndroidEntryPoint
-import java.util.concurrent.Executors
 
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    private val TAG = "MainActivity"
-    private val cameraExecutor = Executors.newSingleThreadExecutor()
-
-    override fun onDestroy() {
-        super.onDestroy()
-        cameraExecutor.shutdown()
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

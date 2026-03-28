@@ -1,8 +1,6 @@
 package com.local.passover.core
 
-import android.companion.DeviceId
 import android.os.Build
-import android.os.ext.SdkExtensions
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -11,7 +9,6 @@ import com.local.passover.MessageOuterClass
 import com.local.passover.network.DnsServiceManager
 import com.local.passover.network.WebSocketClient
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,16 +19,12 @@ import timber.log.Timber
 import javax.crypto.SecretKey
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import okio.ByteString
+import java.util.UUID
 
 enum class ConnectionState {IDLE, DISCOVERING, CONNECTING, CONNECTED, FAILED}
 
@@ -40,6 +33,7 @@ class ConnectionRepository @Inject constructor(
     private val discoverer: DnsServiceManager,
     private val webSocketClient: WebSocketClient,
     private val keyStoreManager: KeystoreManager,
+    private val trustedPeerStore: TrustedPeerStore,
     private val ds: DataStore<Preferences>,
     ) {
     val TAG = "ConnectionRepository"
@@ -47,22 +41,49 @@ class ConnectionRepository @Inject constructor(
     val connectionState = _connectionState.asStateFlow()
 
     private val kDeviceId = stringPreferencesKey("deviceId")
-    private val kEncryptionkey = stringPreferencesKey("encryptionKey")
     private var activeKey: SecretKey? = null
-//    TODO: make activeKey thread safe
 
     private val _incomingMessages = MutableSharedFlow<MessageOuterClass.Message>(replay = 1)
     val incomingMessages = _incomingMessages.asSharedFlow()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    val hasCredentials: Flow<Boolean> = ds.data.map { prefs ->
-        prefs[kDeviceId]!=null && prefs[kEncryptionkey]!=null
-    }
+    val hasTrustedPeers: Flow<Boolean> = trustedPeerStore.allPeersFlow.map { it.isNotEmpty() }
 
     init {
         startMessageProcessing()
+        observeWebSocketState()
     }
 
+    // ── Device identity ───────────────────────────────────────────────────
+
+    suspend fun getDeviceId(): String {
+        val prefs = ds.data.first()
+        val existing = prefs[kDeviceId]
+        if (existing != null) return existing
+
+        val newId = UUID.randomUUID().toString()
+        ds.edit { it[kDeviceId] = newId }
+        Timber.tag(TAG).d("Generated new device ID: $newId")
+        return newId
+    }
+
+    fun getDeviceName(): String = Build.MODEL
+
+    // ── WebSocket state observation ────────────────────────────────────────
+
+    private fun observeWebSocketState() {
+        scope.launch {
+            webSocketClient.connectionState.collect { connected ->
+                if (!connected && _connectionState.value == ConnectionState.CONNECTED) {
+                    Timber.tag(TAG).d("WebSocket disconnected unexpectedly, transitioning to FAILED")
+                    _connectionState.value = ConnectionState.FAILED
+                    activeKey = null
+                }
+            }
+        }
+    }
+
+    // ── Message processing ────────────────────────────────────────────────
 
     private fun startMessageProcessing(){
         scope.launch {
@@ -74,7 +95,13 @@ class ConnectionRepository @Inject constructor(
                         val message = MessageOuterClass.Message.parseFrom(decryptedMessage)
                         _incomingMessages.emit(message)
                     }?: run {
-                        Timber.tag(TAG).w("No active key present to decrypt message")
+                        // During pairing, messages may be unencrypted Identity blobs
+                        try {
+                            val message = MessageOuterClass.Message.parseFrom(byteString.toByteArray())
+                            _incomingMessages.emit(message)
+                        } catch (e: Exception) {
+                            Timber.tag(TAG).w("No active key and couldn't parse raw message")
+                        }
                     }
                 } catch (e: Exception){
                         Timber.tag(TAG).e(e, "Failed to decrypt message")
@@ -83,139 +110,97 @@ class ConnectionRepository @Inject constructor(
         }
     }
 
+    // ── Connection with trusted peers using GroupKey ───────────────────────
 
-    suspend fun connectWithSavedCredentials(): Boolean{
+    suspend fun connectWithTrustedPeer(deviceId: String): Boolean {
         if (_connectionState.value == ConnectionState.CONNECTED ||
             _connectionState.value == ConnectionState.CONNECTING) {
             Timber.tag(TAG).d("Already connected/connecting. Ignoring request.")
             return true
         }
 
-        val prefs = ds.data.first()
-        val deviceId = prefs[kDeviceId]
-        val wrappedKey = prefs[kEncryptionkey]
-
-        if(deviceId == null || wrappedKey == null)return false
-
-        val secretKey = try {
-            keyStoreManager.unwrapKey(wrappedKey)
-        } catch (e: Exception){
-            Timber.tag(TAG).e(e, "Failed to unwrap key")
-            closeConnection()
-            clearCredentials()
-            return false
-        }
-        val success = executeConnectionSequence(deviceId, secretKey)
-        if(success){
-            _connectionState.value = ConnectionState.CONNECTED
-        }
-        else{
-            closeConnection()
-        }
-        return success
-    }
-
-    suspend fun executeConnectionSequence(deviceId: String, secretKey: SecretKey): Boolean  = coroutineScope{
-        if (_connectionState.value == ConnectionState.CONNECTED) return@coroutineScope true
-        _connectionState.value = ConnectionState.DISCOVERING
-        val serviceInfo = discoverer.findService(deviceId)
-        if(serviceInfo == null){
+        return try {
+            connectWithTrustedPeerInternal(deviceId)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "connectWithTrustedPeer failed unexpectedly")
             _connectionState.value = ConnectionState.FAILED
-            Timber.tag(TAG).e("Failed to get serviceInfo")
-            return@coroutineScope false
-        }
-
-        _connectionState.value = ConnectionState.CONNECTING
-        val inetAddress = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && SdkExtensions.getExtensionVersion(Build.VERSION_CODES.TIRAMISU) >= 7) {
-            serviceInfo.hostAddresses.first()
-        } else {
-            serviceInfo.host
-        }
-        val hostAddress = inetAddress.hostAddress?.removePrefix("/") ?: ""
-        val url = "ws://${hostAddress}:${serviceInfo.port}"
-
-        activeKey = secretKey
-        val connectionStateFlow = webSocketClient.connectionState
-        webSocketClient.connect(url)
-        val connected = withTimeoutOrNull(10_000){
-            connectionStateFlow.first{it}
-        }
-        if (connected != true){
-            _connectionState.value = ConnectionState.FAILED
-            closeConnection()
-            Timber.tag(TAG).e("Failed to connect")
-            return@coroutineScope false
-        }
-
-        val identityMessage = MessageOuterClass.Identity.newBuilder().setDeviceId(deviceId).build()
-        val wrapperMessage = MessageOuterClass.Message.newBuilder()
-            .setTimestampMs(System.currentTimeMillis())
-            .setIdentity(identityMessage)
-            .build()
-
-        val encryptedMessage = keyStoreManager.encrypt(secretKey, wrapperMessage.toByteArray())
-
-        val responseDeferred = async{
-            incomingMessages.filter { it.hasIdentity() }.first()
-        }
-
-        webSocketClient.send(encryptedMessage)
-
-        val response = withTimeoutOrNull(15_000){
-            responseDeferred.await()
-        }
-
-        if (response == null){
-            _connectionState.value = ConnectionState.FAILED
-            closeConnection()
-            Timber.tag(TAG).e("Failed to get response")
-            return@coroutineScope false
-        }
-
-        return@coroutineScope try {
-            val identityResponse = response.identity
-            if(identityResponse.deviceId == deviceId){
-                Timber.tag(TAG).d("Saving key, received identity response: ${identityResponse.deviceId}")
-                true
-            }
-            else throw Exception("Invalid response, deviceId does not match")
-        }catch (e: Exception){
-            _connectionState.value = ConnectionState.FAILED
-            closeConnection()
-            Timber.tag(TAG).e(e, "Failed to decrypt test response")
             false
         }
     }
 
-    suspend fun makeTestConnection(deviceId: String, key: String): Boolean {
-        val secretKey = keyStoreManager.getKeyFromString(key)
-        val response = executeConnectionSequence(deviceId, secretKey)
-        closeConnection()
-        return response
+    private suspend fun connectWithTrustedPeerInternal(deviceId: String): Boolean {
+        val peer = trustedPeerStore.getPeerByDeviceId(deviceId) ?: run {
+            Timber.tag(TAG).e("No trusted peer found for deviceId: $deviceId")
+            return false
+        }
+
+        val groupKey = try {
+            keyStoreManager.getOrCreateGroupKey()
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Failed to get group key")
+            _connectionState.value = ConnectionState.FAILED
+            return false
+        }
+
+        _connectionState.value = ConnectionState.DISCOVERING
+        val serviceInfo = discoverer.findService(deviceId)
+        if (serviceInfo == null) {
+            _connectionState.value = ConnectionState.FAILED
+            Timber.tag(TAG).e("Failed to find service for peer: ${peer.deviceName}")
+            return false
+        }
+
+        _connectionState.value = ConnectionState.CONNECTING
+        val inetAddress = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            android.os.ext.SdkExtensions.getExtensionVersion(Build.VERSION_CODES.TIRAMISU) >= 7) {
+            serviceInfo.hostAddresses.firstOrNull()
+        } else {
+            @Suppress("DEPRECATION")
+            serviceInfo.host
+        }
+        val hostAddress = inetAddress?.hostAddress?.removePrefix("/")
+        if (hostAddress.isNullOrEmpty()) {
+            Timber.tag(TAG).e("No host address for peer: ${peer.deviceName}")
+            _connectionState.value = ConnectionState.FAILED
+            return false
+        }
+        val url = "ws://${hostAddress}:${serviceInfo.port}"
+
+        activeKey = groupKey
+        webSocketClient.connect(url)
+        val connected = withTimeoutOrNull(10_000) {
+            webSocketClient.connectionState.first { it }
+        }
+
+        if (connected != true) {
+            _connectionState.value = ConnectionState.FAILED
+            closeConnection()
+            Timber.tag(TAG).e("Failed to connect to ${peer.deviceName}")
+            return false
+        }
+
+        _connectionState.value = ConnectionState.CONNECTED
+        Timber.tag(TAG).d("Connected to trusted peer: ${peer.deviceName}")
+        return true
     }
 
-    private suspend fun saveId(deviceId: String) = ds.edit { prefs ->
-        prefs[kDeviceId] = deviceId
-    }
+    // ── Send / close ──────────────────────────────────────────────────────
 
-    private suspend fun saveKey(key: String) = ds.edit { prefs ->
-        val encryptedKey = keyStoreManager.wrapKey(key)
-        prefs[kEncryptionkey] = encryptedKey
-    }
-
-    suspend fun clearCredentials() = ds.edit { it.clear() }
-
-    suspend fun saveCredentials(deviceId: String, key: String){
-        saveId(deviceId)
-        saveKey(key)
-        Timber.tag(TAG).d("Saved credentials for deviceId: $deviceId")
-    }
-
-    fun send(data: ByteArray){
-        val encryptedData = activeKey?.let { key ->
-            keyStoreManager.encrypt(key, data)
-        } ?: throw Exception("No active key")
-        webSocketClient.send(encryptedData)
+    fun send(data: ByteArray): Boolean {
+        val key = activeKey ?: run {
+            Timber.tag(TAG).w("Cannot send: no active key (not connected)")
+            return false
+        }
+        return try {
+            val encryptedData = keyStoreManager.encrypt(key, data)
+            webSocketClient.send(encryptedData)
+            true
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Failed to encrypt/send data")
+            false
+        }
     }
 
     fun closeConnection(){

@@ -2,39 +2,46 @@
 
 ## 1. Project Overview
 
-**Passover** is an open-source, private toolset for seamless data synchronization between macOS and Android, utilizing a **Local-First WebSocket architecture** with an **Encrypted Internet Relay fallback**.
+**Passover** is an open-source, private toolset for seamless data synchronization between macOS and Android, utilizing a **Local-First WebSocket architecture** with **Mesh Sync** for multi-device group communication.
 
-### Phase 1 Focus (Current)
+### Current Focus
 
-- Secure QR-based Pairing
-- End-to-End (E2E) Encrypted Communication
+- SAS-based device pairing (replaces QR-based pairing)
+- Shared GroupKey encryption (AES-256-GCM)
+- Star topology with hub election for multi-device sync (non-mobile devices only)
 - Bidirectional Text Clipboard Synchronization
-- Local Network Discovery (mDNS)
+- Local Network Discovery (mDNS/Bonjour)
 
 ---
 
 ## 2. System Architecture
 
-### 2.1 Networking Model
+### 2.1 Networking Model — Star Topology
 
-The system operates on a **Client–Server hierarchy**:
+The system operates on a **Star Topology** for resource-efficient multi-device sync:
 
-- **macOS (Server)**  
-  Acts as the primary hub. It runs a WebSocket server locally and maintains a client connection.
+- **Hub (desktop/PC preferred)** — Runs a WebSocket server. Receives messages from any connected device and fans them out to all other connected devices. Any non-mobile device qualifies: macOS, Linux, Windows, Raspberry Pi, etc.
+- **Mobile devices (Android, iOS)** — Always spokes, never hub candidates. Each maintains exactly 1 WebSocket connection to the hub. Same resource usage as a simple client-server setup.
+- **Hub election** — Non-mobile devices are preferred (always-on, plugged in, no battery pressure). Among eligible non-mobile devices, the one with the longest uptime is elected. Mobile devices are excluded from election entirely.
+- **Hub failover** — If the hub goes offline, the next non-mobile device by uptime promotes itself (registers mDNS, starts listening). If no non-mobile device is available, sync pauses until one comes back online.
 
-- **Android (Client)**  
-  Acts as the initiator. It searches for the Mac locally first.
+**Connection count for N devices:**
 
-- **Relay (Proxy)** *(not yet implemented)*  
-  A stateless Node.js WebSocket proxy that bridges two clients based on a `pairID`.
+| Devices | Connections (star) | Connections (full mesh) |
+|---------|--------------------|------------------------|
+| 2 | 1 | 1 |
+| 3 | 2 | 3 |
+| 5 | 4 | 10 |
+| 10 | 9 | 45 |
 
 ### 2.2 Protocol Stack
 
-- **Transport:** WebSockets (WS/WSS) for reliable message framing and firewall traversal
-- **Security:** AES-256-GCM (Authenticated Encryption)
+- **Transport:** WebSockets (WS) for reliable message framing
+- **Security:** AES-256-GCM with shared GroupKey (Authenticated Encryption)
+- **Key Exchange:** ECDH (P-256) + HKDF for pairwise session keys during pairing
+- **Verification:** SAS (Short Authentication String) — 6-digit code
 - **Serialization:** Google Protocol Buffers (Protobuf)
 - **Discovery:** mDNS (Bonjour) for local IP resolution
-- **Proximity Gating:** BLE Advertisements *(not yet implemented, Phase 2)*
 
 ---
 
@@ -47,144 +54,85 @@ package com.local.passover;
 
 message Message {
   int64 timestamp_ms = 1;
+  string messageId = 15;      // UUID for deduplication
+  string originatorId = 16;   // DeviceID of original sender
 
   oneof payload {
     ClipboardMessage clipboard = 2;
     MediaControlMessage mediaControl = 3;
     MediaPlaybackInfo playbackInfo = 4;
-
     FileHeader fileHeader = 5;
     FileChunk fileChunk = 6;
     FileStatusRequest statusRequest = 7;
     FileStatusResponse statusResponse = 8;
     FileTransferError error = 9;
-
     VideoStreamChunk videoChunk = 10;
     MediaArt artwork = 11;
     Heartbeat heartbeat = 12;
     Identity identity = 13;
-    QRPayload qrPayload = 14;
+    HandshakeMessage handshake = 14;
   }
 }
 
 message Identity {
   string deviceId = 1;
+  string deviceName = 2;
+  bytes publicKeyAgreement = 3;   // P-256 public key (X9.63 format)
+  bytes publicKeySignature = 4;   // P-256 signing public key
 }
 
-message QRPayload {
-  string deviceId = 1;
-  string key = 2;
-}
-
-message ClipboardMessage {
-  string content = 1;
-
-  enum ClipboardContentType {
-    TXT = 0;
-    IMG = 1;
-  }
-
-  ClipboardContentType type = 2;
-}
-
-message MediaControlMessage {
-  enum Action {
-    PLAY_PAUSE = 0;
-    NEXT = 1;
-    PREVIOUS = 2;
-    VOLUME_SET = 3;
-  }
-
-  Action action = 1;
-  float volume = 2;
-}
-
-message MediaArt {
-  bytes content = 1;
-}
-
-message MediaPlaybackInfo {
-  bool playbackRate = 1;
-  double duration = 2;
-  double elapsed = 3;
-  string title = 4;
-  string album = 5;
-  string artist = 6;
-  string bundle = 7;
-  float volume = 8;
-}
-
-message FileHeader {
-  string fileId = 1;
-  string filename = 2;
-  int64 filesizeBytes = 3;
-  bytes metadata = 4;
-}
-
-message FileChunk {
-  string fileId = 1;
-  int64 offset = 2;
-  bytes data = 3;
-}
-
-message FileStatusRequest {
-  string fileId = 1;
-}
-
-message FileStatusResponse {
-  string fileId = 1;
-  int64 bytesRecieved = 2;
-}
-
-message FileTransferError {
-  string fileId = 1;
-  string error = 2;
-}
-
-message Heartbeat {
-  bool isMediaPlaying = 1;
-  bool isMacUserActive = 2;
-}
-
-message VideoStreamChunk {
-  bytes frame = 1;
-  int64 presentationTimestampUs = 2;
+message HandshakeMessage {
+  bool sasConfirmed = 1;
+  bytes encryptedGroupKey = 2;    // GroupKey encrypted with pairwise ECDH session key
 }
 ```
+
+*(Other message types — ClipboardMessage, MediaControlMessage, etc. — remain unchanged.)*
 
 ---
 
 ## 4. Security & Pairing Flow
 
-### 4.1 Pairing Mechanism
+### 4.1 Key Architecture
 
-**Mac Side:**
-- Generates a 32-byte SymmetricKey
-- Generates a persistent UUID
-- Displays a QR code: `{"id": "MAC_UUID", "key": "BASE64_KEY"}`
+| Key | Purpose | Storage |
+|-----|---------|---------|
+| **P-256 Key Agreement** | ECDH shared secret during pairing | Android Keystore / macOS Keychain |
+| **P-256 Signing** | Device identity verification | Android Keystore / macOS Keychain |
+| **GroupKey (AES-256)** | All data encryption after pairing | Android DataStore (wrapped) / macOS Keychain |
+| **Master Key (AES-256)** | Wraps GroupKey for secure storage | Android Keystore |
 
-**Android Side:**
-- Scans QR code
-- Verifies key by:
-  - Android connects via WebSocket using the scanned Key
-  - Android sends an encrypted Identity message containing its deviceId
-  - macOS attempts to decrypt. If successful, it verifies the deviceId matches the intended target
-  - macOS responds with its own encrypted Identity message
-  - Android decrypts and verifies the macOS deviceId
+### 4.2 Pairing Flow (SAS-based)
 
-**Key Wrapping Architecture:**
-- A Master Key is generated and stored in the hardware-backed Android Keystore
-- The session SymmetricKey (from QR) is encrypted (wrapped) using the Master Key
-- The wrapped key blob is stored in Jetpack DataStore (Preferences)
+```
+User taps "Pair New Device" on Android
+  → mDNS discovery finds macOS
+  → Android connects via WebSocket
+  → Both exchange Identity messages (public keys + device name)
+  → Both compute SAS = SHA256(sorted public keys) → 6-digit code
+  → Both UIs show the code — user confirms on both
+  → ECDH shared secret → HKDF → pairwise session key
+  → Existing device sends GroupKey encrypted with session key
+  → New device decrypts and saves GroupKey
+  → Both save each other as trusted peers
+```
 
-### 4.2 E2E Encryption
+- If this is the **first ever pairing**, the existing device generates a new GroupKey.
+- If a GroupKey already exists, it's sent to the new device.
+- The pairwise session key is **ephemeral** — used only during pairing.
+
+### 4.3 GroupKey Rotation
+
+When a device is **removed** from the trusted list:
+1. A new GroupKey is generated.
+2. Distributed to all remaining connected peers (encrypted with old GroupKey).
+3. The removed device can no longer decrypt group messages.
+
+### 4.4 E2E Encryption
 
 - **Algorithm:** AES-256-GCM
-- **Process:**
-  1. Serialize inner message (e.g., ClipboardMessage) to bytes
-  2. Encrypt bytes using the SymmetricKey and a unique IV
-  3. Prepend IV to ciphertext
-  4. Send over WebSocket
+- **Key:** Shared GroupKey (same for all group members)
+- **Process:** Serialize → Encrypt with GroupKey + random IV → Prepend IV → Send over WebSocket
 
 ---
 
@@ -192,29 +140,30 @@ message VideoStreamChunk {
 
 ### 5.1 macOS Module (Swift / SwiftUI)
 
-- **PairingManager** — Manages encryption key and device ID lifecycle. Stores secrets in the macOS Keychain.
-- **NetworkServer** — Uses NWListener for local WebSocket connections. Maintains a WebSocket client connection to the Relay.
-- **ClipboardMonitor** — Polls NSPasteboard every 500ms or 1s. Heuristic: If activeApp != "Xcode" and changeCount increments, trigger sync *(future)*.
-- **CryptoService** — Uses CryptoKit for hardware-accelerated AES-GCM.
+- **KeyStore** — P-256 key pairs (agreement + signing) in Keychain, GroupKey management, ECDH shared secret, HKDF session key, SAS computation, AES-GCM encrypt/decrypt.
+- **PairingManager** — Device identity, SAS-based pairing flow, trusted peer management.
+- **TrustedPeerStore** — Codable plist for trusted peers (deviceId, name, public keys, trustedAt).
+- **NetworkManager** — NWListener with mDNS registration, GroupKey-based encryption, identity/SAS handshake for new peers.
+- **ClipboardMonitor** — Polls NSPasteboard for clipboard changes, triggers sync.
+- **PairingWindow** — Separate SwiftUI window for SAS confirmation on incoming pairing requests.
 
 ### 5.2 Android Module (Kotlin / Compose)
 
 #### Process Hierarchy
 
-- **PassoverAccessibilityService** — Root process. Registered as an Android AccessibilityService. Survives across reboots (if enabled by user in system settings). Responsible for:
-  - Starting MainService on boot / service connect
-  - Detecting copy/cut user actions (click events, long-press on configured apps, "copied" toast notifications)
-  - Launching ClipboardActivity to read clipboard data
-  - Managing screen on/off lifecycle (pauses/resumes sync)
+- **PassoverAccessibilityService** — Root process. Detects copy/cut, manages clipboard sync lifecycle.
+- **MainService (Foreground Service)** — WebSocket connection, mDNS discovery, incoming message processing.
+- **ClipboardActivity (Ghost Activity)** — Transparent activity for background clipboard access (Android 10+).
 
-- **MainService (Foreground Service)** — Child of PassoverAccessibilityService. Manages:
-  - WebSocket connection and reconnection
-  - mDNS discovery via DnsServiceManager
-  - Incoming message processing (clipboard updates from Mac)
-  - Persistent notification ("Keeping device in sync" / "Sync paused")
+#### Key Components
 
-- **ClipboardActivity (Ghost Activity)** — Transparent, transient activity (Theme.Ghost). Workaround for Android 10+ background clipboard access restrictions.
-  - Flow: PassoverAccessibilityService detects copy → Launches ClipboardActivity → Activity gains focus → Reads clipboard → Sends text to ConnectionRepository → Closes immediately
+- **KeystoreManager** — P-256 key pairs in Keystore, ECDH + HKDF, GroupKey wrap/unwrap (master key pattern), SAS computation, AES-GCM encrypt/decrypt.
+- **TrustedPeerStore** — Preferences DataStore with JSON serialization. CRUD for trusted peers.
+- **ConnectionRepository** — Persistent deviceId, GroupKey-based encryption, `connectWithTrustedPeer` flow.
+- **PairingViewModel** — Drives discovery → peer list → identity exchange → SAS → GroupKey exchange → save peer.
+- **PairingScreen** — Two-stage UI: discovery list (filtered) → SAS confirmation (6-digit code).
+- **DnsServiceManager** — mDNS discovery for `_passover._tcp` services. Supports single-target and multi-peer discovery.
+- **WebSocketClient** — OkHttp-based WebSocket client.
 
 #### Boot Chain
 
@@ -222,95 +171,97 @@ message VideoStreamChunk {
 Reboot → System re-enables AccessibilityService
        → onServiceConnected()
        → startMainService()
-       → MainService.onCreate()
-       → Reads credentials from DataStore
-       → Connects with saved credentials (mDNS → WebSocket → Identity handshake)
+       → Reads trusted peers
+       → Auto-connects to trusted hub (GroupKey encryption, no SAS needed)
 ```
 
 #### Screen On/Off Lifecycle
 
-PassoverAccessibilityService registers a BroadcastReceiver for screen events:
-- **Screen off** → Sends PAUSE to MainService → WebSocket closes, notification shows "Sync paused"
-- **Screen on** → Sends RESUME to MainService → Reconnects with saved credentials, notification shows "Keeping device in sync"
-
-This saves battery and resources when the phone is in a pocket or the screen is off.
-
-#### Clipboard Sync Flow (Text Only — Phase 1)
-
-**Outgoing (Android → Mac):**
-1. PassoverAccessibilityService detects a copy/cut event
-2. Launches ClipboardActivity (ghost/transparent)
-3. ClipboardActivity reads clipboard text, wraps in ClipboardMessage (TXT type)
-4. Encrypts via ConnectionRepository → sends over WebSocket
-
-**Incoming (Mac → Android):**
-1. MainService collects incoming messages from ConnectionRepository
-2. ClipboardHandler receives ClipboardMessage, sets device clipboard via ClipboardManager
-
-**Planned: Debounce Logic**
-- Start a 1.5s timer on copy detection
-- Reset timer if another copy occurs within the window
-- Send only the final clipboard content
-- Prevents unnecessary network traffic from rapid copy operations
-
-#### Key Components
-
-- **ConnectionRepository** — Singleton. Manages the full connection lifecycle: mDNS discovery → WebSocket connect → Identity handshake → encrypted message send/receive. Stores credentials in DataStore, wraps/unwraps keys via KeystoreManager.
-- **KeystoreManager** — Singleton. Handles AES-256-GCM encrypt/decrypt, Master Key generation in Android Keystore, session key wrapping/unwrapping.
-- **DnsServiceManager** — Singleton. Uses NsdManager to discover the Mac's `_passover._tcp` mDNS service, filtering by deviceId in the TXT record.
-- **WebSocketClient** — Singleton. OkHttp-based WebSocket client. Exposes message and connection state flows.
-
-### 5.3 Relay Module (Node.js) *(not yet implemented)*
-
-- Map<PairID, WebSocket[]> storage
-- On message arrival:
-  - Forward message to all sockets in the same PairID except sender
+- **Screen off** → WebSocket closes, sync paused
+- **Screen on** → Reconnects to trusted hub, sync active
 
 ---
 
-## 6. Connection Lifecycle & Optimization *(not yet implemented)*
+## 6. Connection Lifecycle
 
-### 6.1 The "Upgrade" Path
+### 6.1 Trusted Peer Reconnection
 
-- Android connects to Relay if mDNS fails
-- Android continues low-power background mDNS scanning
-- If Mac is discovered:
-  - Open local WebSocket
-  - Authenticate locally
-  - Close Relay connection to save latency and data
+Already-trusted peers reconnect automatically using the stored GroupKey — no SAS, no ECDH needed.
 
 ### 6.2 Resource Saving
 
-- **Mac Heartbeat** — Sends user activity and media playback state
-- **Android Idle Mode:**
-  - If screen is OFF and Mac heartbeat indicates idle: close WebSocket, enter BLE Proximity Scan mode
-  - Wake Up Conditions: BLE signal detected, user turns screen ON
+- Each non-hub device maintains exactly **1 WebSocket** — negligible battery.
+- Screen off → all connections closed, mDNS stopped.
+- Screen on → re-establish connection.
 
 ---
 
-## 7. Build Roadmap
+## 7. Building the Android App
 
-**Phase 1: Foundations (Current)**
-- ✅ macOS: QR display & Keychain storage
-- ✅ Android: QR scanner & Keystore storage
-- ✅ Networking: mDNS discovery & local WebSocket handshake
-- ✅ Security: AES-GCM encryption pipeline
-- ✅ Feature: Bidirectional **text-only** clipboard sync
-- ✅ Android: AccessibilityService-based clipboard detection
-  - Detect copy/cut via click events and toast notifications
-  - Launch transparent ClipboardActivity to read clipboard
-  - Send text clipboard data to macOS
-- ✅ Lifecycle: Screen on/off auto pause/resume sync
+### Prerequisites
 
-**Phase 2: Mobility & Reliability** *(not yet implemented)*
-- Relay: Deploy Node.js server
-- Android & macOS: Add Relay fallback logic
-- Stability: Handle network changes (Wi-Fi ↔ LTE)
-- Feature: Media controls (Play / Pause / Volume)
-- Feature: Image clipboard support
-- Feature: Clipboard debounce logic
+- **Android Studio** installed (provides the bundled JDK and Android SDK)
+- No separate JDK installation required
 
-**Phase 3: High Bandwidth** *(not yet implemented)*
-- Files: Resumable chunk-based transfer (on-demand)
-- Video: Android camera stream → macOS virtual camera (CMIO)
-- Efficiency: BLE Proximity Gating
+### Command-Line Build
+
+The project uses Gradle. Since a standalone JDK may not be on `PATH`, point `JAVA_HOME` at Android Studio's bundled JBR:
+
+```bash
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+  ./gradlew assembleDebug
+```
+
+The debug APK is output to:
+
+```
+app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Common Gradle Tasks
+
+| Task | Description |
+|------|-------------|
+| `assembleDebug` | Build debug APK |
+| `assembleRelease` | Build release APK (requires signing config) |
+| `installDebug` | Build and install on connected device/emulator |
+| `clean` | Delete all build outputs |
+
+> **Tip:** Prefix any task with `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"` if no system JDK is configured.
+
+---
+
+## 8. Build Roadmap
+
+**Phase 1: Identity & Trust (Current)**
+- ✅ SAS-based device pairing (replaces QR)
+- ✅ P-256 key pairs (agreement + signing)
+- ✅ ECDH + HKDF shared secret and session key derivation
+- ✅ Shared GroupKey (AES-256-GCM) for all data encryption
+- ✅ Trusted peer persistent storage
+- ✅ mDNS-based peer discovery with trusted peer filtering
+- ✅ AES-GCM encryption pipeline
+- ✅ Bidirectional text clipboard sync
+- ✅ Android AccessibilityService clipboard detection
+- ✅ Screen on/off lifecycle management
+
+**Phase 2: Group Mesh Transport & Security Hardening**
+- Star topology with hub election (non-mobile devices only — macOS, Linux, Windows, etc.)
+- Hub fan-out (message forwarding to all connected peers)
+- Hub failover and migration (pause sync if no non-mobile device is available)
+- Continuous passive mDNS discovery
+- Message deduplication (SeenMessageCache)
+- GroupKey rotation on device removal
+- mDNS service registration (isHub TXT record)
+- Ephemeral pairing keys (generate fresh P-256 key pair per session, or nonce exchange, so SAS and session keys are unique per attempt)
+- Signing key authentication (use the P-256 signing key to sign Identity messages, verify on receive — binds key agreement to device identity)
+- Connection-level trust verification on reconnect (verify peer identity after GroupKey decryption, not just accept any device with the key)
+- Pairing timeout (auto-reject SAS if not confirmed within ~60s, prevent stale pairing state blocking new requests)
+- HKDF salt improvement (use a meaningful constant or session-derived salt instead of 32 zero bytes)
+- removing a device from one device should also remove it from the other device (if connected)
+
+**Phase 3: Relay & Multi-OS Expansion** *(future)*
+- Stateless relay server for cross-network sync
+- Trust Introduction (transitive trust via signed PeerIntroduction)
+- Persistent MessageCache deduplication (Room / CoreData)
+- File transfer, media controls, video streaming

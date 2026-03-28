@@ -27,6 +27,114 @@ class DnsServiceManager @Inject constructor(
         }
     }
 
+    // ── Discover all services (multi-peer) ────────────────────────────────
+
+    suspend fun discoverServices(): List<NsdServiceInfo> =
+        withTimeoutOrNull(DISCOVERY_TIMEOUT_MS) {
+            suspendCancellableCoroutine { continuation ->
+                val resolvedServices = mutableListOf<NsdServiceInfo>()
+                var discoveryListener: NsdManager.DiscoveryListener? = null
+                val lock = Any()
+                var isResumed = false
+                var isResolving = false
+                val pendingServices = mutableListOf<NsdServiceInfo>()
+                var discoveryComplete = false
+
+                val resolveListener = object : NsdManager.ResolveListener {
+                    override fun onResolveFailed(service: NsdServiceInfo, errorCode: Int) {
+                        Timber.tag(TAG).e("Resolve failed for ${service.serviceName}: $errorCode")
+                        resolveNext()
+                    }
+                    override fun onServiceResolved(service: NsdServiceInfo) {
+                        Timber.tag(TAG).i("Service resolved: $service")
+                        synchronized(lock) {
+                            resolvedServices.add(service)
+                            resolveNext()
+                        }
+                    }
+
+                    private fun resolveNext() {
+                        synchronized(lock) {
+                            val next = pendingServices.removeFirstOrNull()
+                            if (next != null) {
+                                nsdManager.resolveService(next, this)
+                            } else {
+                                isResolving = false
+                                // If discovery has stopped and nothing left to resolve, we're done
+                                if (discoveryComplete && !isResumed) {
+                                    isResumed = true
+                                    continuation.resume(resolvedServices.toList())
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Use a delayed finish — give discovery a few seconds to collect peers
+                val finishDiscovery = {
+                    synchronized(lock) {
+                        discoveryComplete = true
+                        stopDiscoverySafe(discoveryListener)
+                        if (!isResolving && !isResumed) {
+                            isResumed = true
+                            continuation.resume(resolvedServices.toList())
+                        }
+                    }
+                }
+
+                discoveryListener = object : NsdManager.DiscoveryListener {
+                    override fun onDiscoveryStarted(serviceType: String) {
+                        Timber.tag(TAG).i("Discovery started: $serviceType")
+                        // Schedule a finish after a short collection window
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            finishDiscovery()
+                        }, 5_000)
+                    }
+                    override fun onDiscoveryStopped(serviceType: String) {
+                        Timber.tag(TAG).i("Discovery stopped: $serviceType")
+                    }
+                    override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
+                        Timber.tag(TAG).d("Start discovery failed: $errorCode")
+                        synchronized(lock) {
+                            if (!isResumed) {
+                                isResumed = true
+                                continuation.resume(emptyList())
+                            }
+                        }
+                    }
+                    override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
+                        Timber.tag(TAG).d("Stop discovery failed: $errorCode")
+                    }
+                    override fun onServiceLost(service: NsdServiceInfo) {
+                        Timber.tag(TAG).w("Service lost: ${service.serviceName}")
+                    }
+                    override fun onServiceFound(service: NsdServiceInfo) {
+                        Timber.tag(TAG).i("Service found: $service")
+                        if (service.serviceName.contains(serviceName)) {
+                            synchronized(lock) {
+                                if (isResumed) return
+                                if (!isResolving) {
+                                    isResolving = true
+                                    nsdManager.resolveService(service, resolveListener)
+                                } else {
+                                    pendingServices.add(service)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                continuation.invokeOnCancellation {
+                    Timber.tag(TAG).w("Coroutine cancelled, stopping discovery")
+                    stopDiscoverySafe(discoveryListener)
+                }
+                nsdManager.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
+            }
+        } ?: emptyList()
+
+    // ── Find specific service by deviceId (existing, kept for backward compat) ──
+    // TODO: remove this if not needed
+
     @OptIn(ExperimentalCoroutinesApi::class)
     suspend fun findService(deviceId: String): NsdServiceInfo? =
         withTimeoutOrNull(DISCOVERY_TIMEOUT_MS) {
@@ -115,7 +223,7 @@ class DnsServiceManager @Inject constructor(
 
             continuation.invokeOnCancellation {
                 Timber.tag(TAG).w("Coroutine cancelled, stopping discovery")
-                discoveryListener.let { nsdManager.stopServiceDiscovery(it) }
+                stopDiscoverySafe(discoveryListener)
             }
             nsdManager.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
         }

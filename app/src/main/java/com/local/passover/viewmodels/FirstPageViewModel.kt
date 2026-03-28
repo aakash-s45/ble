@@ -3,29 +3,27 @@ package com.local.passover.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.local.passover.core.ConnectionRepository
+import com.local.passover.core.KeystoreManager
+import com.local.passover.core.TrustedPeerStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
-sealed interface FirstPageState{
-    object Connected: FirstPageState
-    object NotConnected: FirstPageState
-    object Loading: FirstPageState
-    data class Error(val message: String): FirstPageState
-}
 
 @HiltViewModel
 class FirstPageViewModel @Inject constructor(
     private val connectionRepository: ConnectionRepository,
+    private val trustedPeerStore: TrustedPeerStore,
+    private val keystoreManager: KeystoreManager,
 ): ViewModel() {
     val TAG = "FirstPageViewModel"
     val connectionState = connectionRepository.connectionState
-    val hasCredentials = connectionRepository.hasCredentials
+    val trustedPeers: Flow<List<TrustedPeerStore.TrustedPeer>> = trustedPeerStore.allPeersFlow
 
-    fun removeSavedCredentials(){
+    fun removeTrustedPeer(deviceId: String) {
         viewModelScope.launch {
-            connectionRepository.closeConnection()
-            connectionRepository.clearCredentials()
+            trustedPeerStore.removePeer(deviceId)
+            // TODO: trigger GroupKey rotation when implemented in Phase 2
         }
     }
 }

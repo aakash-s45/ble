@@ -46,11 +46,16 @@ class WebSocketClient @Inject constructor(
     }
 
     fun send(data: ByteArray){
-        val _data = ByteString.of(*data)
-        webSocket?.send(_data)
+        val bytes = ByteString.of(*data)
+        webSocket?.send(bytes)
     }
+
     fun disconnect(code: Int = 1000, reason: String = "Client disconnected"){
-        webSocket?.close(code, reason)
+        try {
+            webSocket?.close(code, reason)
+        } catch (_: Exception) {
+            webSocket?.cancel()
+        }
         webSocket = null
         _connectionState.tryEmit(false)
     }
