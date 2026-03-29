@@ -5,15 +5,17 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.local.passover.MessageOuterClass
-import com.local.passover.core.ConnectionRepository
+import com.local.passover.core.SyncOrchestrator
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
+// Transparent activity to send clipboard data to the server
+// TODO: instead of tranparent, add an option to add a floating action button
 @AndroidEntryPoint
 class ClipboardActivity : ComponentActivity() {
-    @Inject lateinit var connectionRepo: ConnectionRepository
+    @Inject lateinit var syncOrchestrator: SyncOrchestrator
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,7 +46,7 @@ class ClipboardActivity : ComponentActivity() {
         }
     }
 
-    private fun sendClipboardData(text: String){
+    private fun sendClipboardData(text: String) {
         try {
             val clipboardMessage = MessageOuterClass.ClipboardMessage.newBuilder()
                 .setType(MessageOuterClass.ClipboardMessage.ClipboardContentType.TXT)
@@ -53,7 +55,7 @@ class ClipboardActivity : ComponentActivity() {
                 .setTimestampMs(System.currentTimeMillis())
                 .setClipboard(clipboardMessage)
                 .build()
-            connectionRepo.send(wrapperMessage.toByteArray())
+            syncOrchestrator.sendMessage(wrapperMessage)
         } catch (e: Exception) {
             Timber.tag("ClipboardActivity").e(e, "Failed to send clipboard data")
         }

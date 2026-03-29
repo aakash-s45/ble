@@ -9,9 +9,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
 import javax.inject.Inject
-import javax.inject.Singleton
 
-@Singleton
 class WebSocketClient @Inject constructor(
     private val okHttpClient: OkHttpClient
 ){

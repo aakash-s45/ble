@@ -2,7 +2,9 @@ package com.local.passover.network
 
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import android.os.Handler
+import android.os.Looper
+import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
@@ -12,18 +14,109 @@ import kotlin.coroutines.resume
 
 @Singleton
 class DnsServiceManager @Inject constructor(
-    private  val nsdManager: NsdManager
+    private val nsdManager: NsdManager
 ) {
     private val TAG = "DnsServiceManager"
     private val serviceType = "_passover._tcp"
     private val serviceName = "Passover"
     private val DISCOVERY_TIMEOUT_MS = 15_000L
+    private val DISCOVERY_COLLECTION_WINDOW_MS = 5_000L
 
     private fun stopDiscoverySafe(listener: NsdManager.DiscoveryListener?) {
         try {
             listener?.let { nsdManager.stopServiceDiscovery(it) }
         } catch (e: IllegalArgumentException) {
             Timber.tag(TAG).e(e, "Listener error: ")
+        }
+    }
+
+    private fun isTargetService(service: NsdServiceInfo): Boolean =
+        service.serviceName.contains(serviceName)
+
+    private class DiscoverySession<T>(
+        private val continuation: CancellableContinuation<T>,
+        private val stopDiscovery: () -> Unit,
+        private val onComplete: () -> Unit = {}
+    ) {
+        private val stateLock = Any()
+        private val pendingServices = mutableListOf<NsdServiceInfo>()
+        private var isCompleted = false
+        private var hasResolveInFlight = false
+        private var discoveryFinished = false
+
+        fun complete(result: T, stopDiscoveryBeforeResume: Boolean = false) {
+            synchronized(stateLock) {
+                if (isCompleted || !continuation.isActive) return
+
+                isCompleted = true
+                onComplete()
+                if (stopDiscoveryBeforeResume) {
+                    stopDiscovery()
+                }
+                continuation.resume(result)
+            }
+        }
+
+        fun enqueueForResolution(
+            service: NsdServiceInfo,
+            resolveService: (NsdServiceInfo) -> Unit,
+        ) {
+            synchronized(stateLock) {
+                if (isCompleted) return
+
+                if (hasResolveInFlight) {
+                    pendingServices.add(service)
+                    return
+                }
+
+                hasResolveInFlight = true
+                resolveService(service)
+            }
+        }
+
+        fun onResolveFinished(
+            resolveService: (NsdServiceInfo) -> Unit,
+            beforeNext: (() -> Unit)? = null,
+            onIdleAfterDiscovery: (() -> Unit)? = null,
+        ) {
+            synchronized(stateLock) {
+                if (isCompleted) return
+
+                beforeNext?.invoke()
+
+                val next = pendingServices.removeFirstOrNull()
+                if (next != null) {
+                    resolveService(next)
+                    return
+                }
+
+                hasResolveInFlight = false
+                if (discoveryFinished) {
+                    onIdleAfterDiscovery?.invoke()
+                }
+            }
+        }
+
+        fun markDiscoveryFinished(onIdleAfterDiscovery: () -> Unit) {
+            synchronized(stateLock) {
+                if (isCompleted) return
+
+                discoveryFinished = true
+                stopDiscovery()
+                if (!hasResolveInFlight) {
+                    onIdleAfterDiscovery()
+                }
+            }
+        }
+
+        fun cancel() {
+            synchronized(stateLock) {
+                if (isCompleted) return
+
+                isCompleted = true
+                onComplete()
+                stopDiscovery()
+            }
         }
     }
 
@@ -34,91 +127,70 @@ class DnsServiceManager @Inject constructor(
             suspendCancellableCoroutine { continuation ->
                 val resolvedServices = mutableListOf<NsdServiceInfo>()
                 var discoveryListener: NsdManager.DiscoveryListener? = null
-                val lock = Any()
-                var isResumed = false
-                var isResolving = false
-                val pendingServices = mutableListOf<NsdServiceInfo>()
-                var discoveryComplete = false
+                val finishHandler = Handler(Looper.getMainLooper())
+                lateinit var session: DiscoverySession<List<NsdServiceInfo>>
+                val finishRunnable = Runnable {
+                    session.markDiscoveryFinished {
+                        session.complete(resolvedServices.toList())
+                    }
+                }
+                session = DiscoverySession(
+                    continuation = continuation,
+                    stopDiscovery = { stopDiscoverySafe(discoveryListener) },
+                    onComplete = { finishHandler.removeCallbacks(finishRunnable) },
+                )
 
                 val resolveListener = object : NsdManager.ResolveListener {
                     override fun onResolveFailed(service: NsdServiceInfo, errorCode: Int) {
                         Timber.tag(TAG).e("Resolve failed for ${service.serviceName}: $errorCode")
-                        resolveNext()
+                        session.onResolveFinished(
+                            resolveService = { next -> nsdManager.resolveService(next, this) },
+                            onIdleAfterDiscovery = {
+                                session.complete(resolvedServices.toList())
+                            },
+                        )
                     }
+
                     override fun onServiceResolved(service: NsdServiceInfo) {
                         Timber.tag(TAG).i("Service resolved: $service")
-                        synchronized(lock) {
-                            resolvedServices.add(service)
-                            resolveNext()
-                        }
-                    }
-
-                    private fun resolveNext() {
-                        synchronized(lock) {
-                            val next = pendingServices.removeFirstOrNull()
-                            if (next != null) {
-                                nsdManager.resolveService(next, this)
-                            } else {
-                                isResolving = false
-                                // If discovery has stopped and nothing left to resolve, we're done
-                                if (discoveryComplete && !isResumed) {
-                                    isResumed = true
-                                    continuation.resume(resolvedServices.toList())
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Use a delayed finish — give discovery a few seconds to collect peers
-                val finishDiscovery = {
-                    synchronized(lock) {
-                        discoveryComplete = true
-                        stopDiscoverySafe(discoveryListener)
-                        if (!isResolving && !isResumed) {
-                            isResumed = true
-                            continuation.resume(resolvedServices.toList())
-                        }
+                        session.onResolveFinished(
+                            resolveService = { next -> nsdManager.resolveService(next, this) },
+                            beforeNext = { resolvedServices.add(service) },
+                            onIdleAfterDiscovery = {
+                                session.complete(resolvedServices.toList())
+                            },
+                        )
                     }
                 }
 
                 discoveryListener = object : NsdManager.DiscoveryListener {
                     override fun onDiscoveryStarted(serviceType: String) {
                         Timber.tag(TAG).i("Discovery started: $serviceType")
-                        // Schedule a finish after a short collection window
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            finishDiscovery()
-                        }, 5_000)
+                        finishHandler.postDelayed(finishRunnable, DISCOVERY_COLLECTION_WINDOW_MS)
                     }
+
                     override fun onDiscoveryStopped(serviceType: String) {
                         Timber.tag(TAG).i("Discovery stopped: $serviceType")
                     }
+
                     override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
                         Timber.tag(TAG).d("Start discovery failed: $errorCode")
-                        synchronized(lock) {
-                            if (!isResumed) {
-                                isResumed = true
-                                continuation.resume(emptyList())
-                            }
-                        }
+                        session.complete(emptyList())
                     }
+
                     override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
                         Timber.tag(TAG).d("Stop discovery failed: $errorCode")
                     }
+
                     override fun onServiceLost(service: NsdServiceInfo) {
                         Timber.tag(TAG).w("Service lost: ${service.serviceName}")
                     }
+
                     override fun onServiceFound(service: NsdServiceInfo) {
                         Timber.tag(TAG).i("Service found: $service")
-                        if (service.serviceName.contains(serviceName)) {
-                            synchronized(lock) {
-                                if (isResumed) return
-                                if (!isResolving) {
-                                    isResolving = true
-                                    nsdManager.resolveService(service, resolveListener)
-                                } else {
-                                    pendingServices.add(service)
-                                }
+                        if (isTargetService(service)) {
+                            session.enqueueForResolution(service) { next ->
+                                nsdManager.resolveService(next, resolveListener)
                             }
                         }
                     }
@@ -126,7 +198,7 @@ class DnsServiceManager @Inject constructor(
 
                 continuation.invokeOnCancellation {
                     Timber.tag(TAG).w("Coroutine cancelled, stopping discovery")
-                    stopDiscoverySafe(discoveryListener)
+                    session.cancel()
                 }
                 nsdManager.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
             }
@@ -135,97 +207,77 @@ class DnsServiceManager @Inject constructor(
     // ── Find specific service by deviceId (existing, kept for backward compat) ──
     // TODO: remove this if not needed
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     suspend fun findService(deviceId: String): NsdServiceInfo? =
         withTimeoutOrNull(DISCOVERY_TIMEOUT_MS) {
-        suspendCancellableCoroutine { continuation ->
-            var discoveryListener: NsdManager.DiscoveryListener? = null
-            val resumeLock = Any()
-            var isResumed = false
-            var isResolving = false
-            val pendingServices = mutableListOf<NsdServiceInfo>()
+            suspendCancellableCoroutine { continuation ->
+                var discoveryListener: NsdManager.DiscoveryListener? = null
+                val session = DiscoverySession(
+                    continuation = continuation,
+                    stopDiscovery = { stopDiscoverySafe(discoveryListener) },
+                )
 
-            val resolveListener = object : NsdManager.ResolveListener {
-                override fun onResolveFailed(service: NsdServiceInfo, errorCode: Int) {
-                    Timber.tag(TAG).e("Resolve failed for ${service.serviceName}: $errorCode")
-                    resolveNext()
-                }
-                override fun onServiceResolved(service: NsdServiceInfo) {
-                    Timber.tag(TAG).i("Service resolved: $service")
-                    val deviceIdBytes = service.attributes["deviceId"]
-                    val resolvedId = deviceIdBytes?.let { String(it, Charsets.UTF_8) }
-
-                    if (resolvedId != deviceId) {
-                        Timber.tag(TAG).d("Ignored service from wrong device: $resolvedId")
-                        resolveNext()
-                        return
+                val resolveListener = object : NsdManager.ResolveListener {
+                    override fun onResolveFailed(service: NsdServiceInfo, errorCode: Int) {
+                        Timber.tag(TAG).e("Resolve failed for ${service.serviceName}: $errorCode")
+                        session.onResolveFinished(
+                            resolveService = { next -> nsdManager.resolveService(next, this) },
+                        )
                     }
 
-                    synchronized(resumeLock) {
-                        if (continuation.isActive && !isResumed) {
-                            isResumed = true
-                            stopDiscoverySafe(discoveryListener)
-                            continuation.resume(service)
+                    override fun onServiceResolved(service: NsdServiceInfo) {
+                        Timber.tag(TAG).i("Service resolved: $service")
+                        val deviceIdBytes = service.attributes["deviceId"]
+                        val resolvedId = deviceIdBytes?.let { String(it, Charsets.UTF_8) }
+
+                        if (resolvedId != deviceId) {
+                            Timber.tag(TAG).d("Ignored service from wrong device: $resolvedId")
+                            session.onResolveFinished(
+                                resolveService = { next -> nsdManager.resolveService(next, this) },
+                            )
+                            return
                         }
+
+                        session.complete(service, stopDiscoveryBeforeResume = true)
                     }
                 }
 
-                private fun resolveNext() {
-                    synchronized(resumeLock) {
-                        if (isResumed) return
-                        val next = pendingServices.removeFirstOrNull()
-                        if (next != null) {
-                            nsdManager.resolveService(next, this)
-                        } else {
-                            isResolving = false
-                        }
+                discoveryListener = object : NsdManager.DiscoveryListener {
+                    override fun onDiscoveryStarted(serviceType: String) {
+                        Timber.tag(TAG).i("Discovery started: $serviceType")
                     }
-                }
-            }
 
-            discoveryListener = object : NsdManager.DiscoveryListener {
-                override fun onDiscoveryStarted(serviceType: String) {
-                    Timber.tag(TAG).i("Discovery started: $serviceType")
-                }
-                override fun onDiscoveryStopped(serviceType: String) {
-                    Timber.tag(TAG).i("Discovery stopped: $serviceType")
-                }
-                override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
-                    Timber.tag(TAG).d("Start discovery failed: $errorCode")
-                    synchronized(resumeLock) {
-                        if (continuation.isActive && !isResumed) {
-                            isResumed = true
-                            continuation.resume(null)
-                        }
+                    override fun onDiscoveryStopped(serviceType: String) {
+                        Timber.tag(TAG).i("Discovery stopped: $serviceType")
                     }
-                }
-                override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
-                    Timber.tag(TAG).d("Stop discovery failed: $errorCode")
-                }
-                override fun onServiceLost(service: NsdServiceInfo) {
-                    Timber.tag(TAG).w("Service lost: ${service.serviceName}")
-                }
-                override fun onServiceFound(service: NsdServiceInfo) {
-                    Timber.tag(TAG).i("Service found: $service")
-                    if (service.serviceName.contains(serviceName)) {
-                        synchronized(resumeLock) {
-                            if (isResumed) return
-                            if (!isResolving) {
-                                isResolving = true
-                                nsdManager.resolveService(service, resolveListener)
-                            } else {
-                                pendingServices.add(service)
+
+                    override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
+                        Timber.tag(TAG).d("Start discovery failed: $errorCode")
+                        session.complete(null)
+                    }
+
+                    override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
+                        Timber.tag(TAG).d("Stop discovery failed: $errorCode")
+                    }
+
+                    override fun onServiceLost(service: NsdServiceInfo) {
+                        Timber.tag(TAG).w("Service lost: ${service.serviceName}")
+                    }
+
+                    override fun onServiceFound(service: NsdServiceInfo) {
+                        Timber.tag(TAG).i("Service found: $service")
+                        if (isTargetService(service)) {
+                            session.enqueueForResolution(service) { next ->
+                                nsdManager.resolveService(next, resolveListener)
                             }
                         }
                     }
                 }
-            }
 
-            continuation.invokeOnCancellation {
-                Timber.tag(TAG).w("Coroutine cancelled, stopping discovery")
-                stopDiscoverySafe(discoveryListener)
+                continuation.invokeOnCancellation {
+                    Timber.tag(TAG).w("Coroutine cancelled, stopping discovery")
+                    session.cancel()
+                }
+                nsdManager.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
             }
-            nsdManager.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
         }
-    }
 }

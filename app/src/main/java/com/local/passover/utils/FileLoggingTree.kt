@@ -18,8 +18,6 @@ class FileLoggingTree(private val context: Context) : Timber.DebugTree() {
 
     @SuppressLint("LogNotTimber")
     override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-        super.log(priority, tag, message, t)
-
         try {
             val logFile = File(context.filesDir, LOG_FILE_NAME)
             if (!logFile.exists()) {
@@ -53,4 +51,3 @@ class FileLoggingTree(private val context: Context) : Timber.DebugTree() {
         }
     }
 }
-

@@ -17,7 +17,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.local.passover.viewmodels.DiscoveredPeer
+import com.local.passover.core.DiscoveredPeer
 import com.local.passover.viewmodels.PairingState
 import com.local.passover.viewmodels.PairingViewModel
 
