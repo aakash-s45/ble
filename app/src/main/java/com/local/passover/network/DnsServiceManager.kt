@@ -7,7 +7,7 @@ import android.os.Looper
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
-import timber.log.Timber
+import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -26,7 +26,7 @@ class DnsServiceManager @Inject constructor(
         try {
             listener?.let { nsdManager.stopServiceDiscovery(it) }
         } catch (e: IllegalArgumentException) {
-            Timber.tag(TAG).e(e, "Listener error: ")
+            Log.e(TAG, "Listener error: ", e)
         }
     }
 
@@ -142,7 +142,7 @@ class DnsServiceManager @Inject constructor(
 
                 val resolveListener = object : NsdManager.ResolveListener {
                     override fun onResolveFailed(service: NsdServiceInfo, errorCode: Int) {
-                        Timber.tag(TAG).e("Resolve failed for ${service.serviceName}: $errorCode")
+                        Log.e(TAG, "Resolve failed for ${service.serviceName}: $errorCode")
                         session.onResolveFinished(
                             resolveService = { next -> nsdManager.resolveService(next, this) },
                             onIdleAfterDiscovery = {
@@ -152,7 +152,7 @@ class DnsServiceManager @Inject constructor(
                     }
 
                     override fun onServiceResolved(service: NsdServiceInfo) {
-                        Timber.tag(TAG).i("Service resolved: $service")
+                        Log.i(TAG, "Service resolved: $service")
                         session.onResolveFinished(
                             resolveService = { next -> nsdManager.resolveService(next, this) },
                             beforeNext = { resolvedServices.add(service) },
@@ -165,29 +165,29 @@ class DnsServiceManager @Inject constructor(
 
                 discoveryListener = object : NsdManager.DiscoveryListener {
                     override fun onDiscoveryStarted(serviceType: String) {
-                        Timber.tag(TAG).i("Discovery started: $serviceType")
+                        Log.i(TAG, "Discovery started: $serviceType")
                         finishHandler.postDelayed(finishRunnable, DISCOVERY_COLLECTION_WINDOW_MS)
                     }
 
                     override fun onDiscoveryStopped(serviceType: String) {
-                        Timber.tag(TAG).i("Discovery stopped: $serviceType")
+                        Log.i(TAG, "Discovery stopped: $serviceType")
                     }
 
                     override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
-                        Timber.tag(TAG).d("Start discovery failed: $errorCode")
+                        Log.d(TAG, "Start discovery failed: $errorCode")
                         session.complete(emptyList())
                     }
 
                     override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
-                        Timber.tag(TAG).d("Stop discovery failed: $errorCode")
+                        Log.d(TAG, "Stop discovery failed: $errorCode")
                     }
 
                     override fun onServiceLost(service: NsdServiceInfo) {
-                        Timber.tag(TAG).w("Service lost: ${service.serviceName}")
+                        Log.w(TAG, "Service lost: ${service.serviceName}")
                     }
 
                     override fun onServiceFound(service: NsdServiceInfo) {
-                        Timber.tag(TAG).i("Service found: $service")
+                        Log.i(TAG, "Service found: $service")
                         if (isTargetService(service)) {
                             session.enqueueForResolution(service) { next ->
                                 nsdManager.resolveService(next, resolveListener)
@@ -197,7 +197,7 @@ class DnsServiceManager @Inject constructor(
                 }
 
                 continuation.invokeOnCancellation {
-                    Timber.tag(TAG).w("Coroutine cancelled, stopping discovery")
+                    Log.w(TAG, "Coroutine cancelled, stopping discovery")
                     session.cancel()
                 }
                 nsdManager.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
@@ -218,19 +218,19 @@ class DnsServiceManager @Inject constructor(
 
                 val resolveListener = object : NsdManager.ResolveListener {
                     override fun onResolveFailed(service: NsdServiceInfo, errorCode: Int) {
-                        Timber.tag(TAG).e("Resolve failed for ${service.serviceName}: $errorCode")
+                        Log.e(TAG, "Resolve failed for ${service.serviceName}: $errorCode")
                         session.onResolveFinished(
                             resolveService = { next -> nsdManager.resolveService(next, this) },
                         )
                     }
 
                     override fun onServiceResolved(service: NsdServiceInfo) {
-                        Timber.tag(TAG).i("Service resolved: $service")
+                        Log.i(TAG, "Service resolved: $service")
                         val deviceIdBytes = service.attributes["deviceId"]
                         val resolvedId = deviceIdBytes?.let { String(it, Charsets.UTF_8) }
 
                         if (resolvedId != deviceId) {
-                            Timber.tag(TAG).d("Ignored service from wrong device: $resolvedId")
+                            Log.d(TAG, "Ignored service from wrong device: $resolvedId")
                             session.onResolveFinished(
                                 resolveService = { next -> nsdManager.resolveService(next, this) },
                             )
@@ -243,28 +243,28 @@ class DnsServiceManager @Inject constructor(
 
                 discoveryListener = object : NsdManager.DiscoveryListener {
                     override fun onDiscoveryStarted(serviceType: String) {
-                        Timber.tag(TAG).i("Discovery started: $serviceType")
+                        Log.i(TAG, "Discovery started: $serviceType")
                     }
 
                     override fun onDiscoveryStopped(serviceType: String) {
-                        Timber.tag(TAG).i("Discovery stopped: $serviceType")
+                        Log.i(TAG, "Discovery stopped: $serviceType")
                     }
 
                     override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
-                        Timber.tag(TAG).d("Start discovery failed: $errorCode")
+                        Log.d(TAG, "Start discovery failed: $errorCode")
                         session.complete(null)
                     }
 
                     override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
-                        Timber.tag(TAG).d("Stop discovery failed: $errorCode")
+                        Log.d(TAG, "Stop discovery failed: $errorCode")
                     }
 
                     override fun onServiceLost(service: NsdServiceInfo) {
-                        Timber.tag(TAG).w("Service lost: ${service.serviceName}")
+                        Log.w(TAG, "Service lost: ${service.serviceName}")
                     }
 
                     override fun onServiceFound(service: NsdServiceInfo) {
-                        Timber.tag(TAG).i("Service found: $service")
+                        Log.i(TAG, "Service found: $service")
                         if (isTargetService(service)) {
                             session.enqueueForResolution(service) { next ->
                                 nsdManager.resolveService(next, resolveListener)
@@ -274,7 +274,7 @@ class DnsServiceManager @Inject constructor(
                 }
 
                 continuation.invokeOnCancellation {
-                    Timber.tag(TAG).w("Coroutine cancelled, stopping discovery")
+                    Log.w(TAG, "Coroutine cancelled, stopping discovery")
                     session.cancel()
                 }
                 nsdManager.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, discoveryListener)

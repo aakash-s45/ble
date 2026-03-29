@@ -6,7 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.first
-import timber.log.Timber
+import android.util.Log
 import java.security.KeyPair
 import java.util.UUID
 import javax.crypto.SecretKey
@@ -39,7 +39,7 @@ class DeviceIdentityStore @Inject constructor(
 
         val newId = UUID.randomUUID().toString()
         ds.edit { it[kDeviceId] = newId }
-        Timber.tag(TAG).d("Generated new device ID: $newId")
+        Log.d(TAG, "Generated new device ID: $newId")
         return newId
     }
 
@@ -50,7 +50,7 @@ class DeviceIdentityStore @Inject constructor(
             return try {
                 unwrapKey(wrappedKey)
             } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "Failed to unwrap group key, generating new one")
+                Log.e(TAG, "Failed to unwrap group key, generating new one", e)
                 val newKey = crypto.generateGroupKey()
                 saveGroupKey(newKey)
                 newKey
@@ -64,7 +64,7 @@ class DeviceIdentityStore @Inject constructor(
     suspend fun saveGroupKey(key: SecretKey) {
         val wrapped = wrapBytes(key.encoded)
         ds.edit { prefs -> prefs[kWrappedGroupKey] = wrapped }
-        Timber.tag(TAG).d("Saved group key")
+        Log.d(TAG, "Saved group key")
     }
 
     suspend fun hasGroupKey(): Boolean {
@@ -87,7 +87,7 @@ class DeviceIdentityStore @Inject constructor(
                 val publicKeyBytes = Base64.decode(storedPublic, Base64.DEFAULT)
                 crypto.buildSigningKeyPairFromBytes(privateKeyBytes, publicKeyBytes)
             } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "Failed to load signing pair, regenerating")
+                Log.e(TAG, "Failed to load signing pair, regenerating", e)
                 generateAndStoreSigningPair()
             }
         }
@@ -111,7 +111,7 @@ class DeviceIdentityStore @Inject constructor(
             prefs[kSigningPublicKey] = publicKeyBase64
         }
 
-        Timber.tag(TAG).d("Generated and stored P-256 signing pair")
+        Log.d(TAG, "Generated and stored P-256 signing pair")
         return keyPair
     }
 

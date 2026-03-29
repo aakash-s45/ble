@@ -9,7 +9,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.view.accessibility.AccessibilityEvent
 import com.local.passover.clipboard.ClipboardActivity
-import timber.log.Timber
+import android.util.Log
 
 @SuppressLint("AccessibilityPolicy")
 class PassoverAccessibilityService : AccessibilityService() {
@@ -21,11 +21,11 @@ class PassoverAccessibilityService : AccessibilityService() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 Intent.ACTION_SCREEN_OFF -> {
-                    Timber.tag(TAG).d("Screen OFF — pausing sync")
+                    Log.d(TAG, "Screen OFF — pausing sync")
                     sendMainServiceAction(MainService.ACTION_PAUSE)
                 }
                 Intent.ACTION_SCREEN_ON -> {
-                    Timber.tag(TAG).d("Screen ON — resuming sync")
+                    Log.d(TAG, "Screen ON — resuming sync")
                     sendMainServiceAction(MainService.ACTION_RESUME)
                 }
             }
@@ -52,7 +52,7 @@ class PassoverAccessibilityService : AccessibilityService() {
         }
         registerReceiver(screenReceiver, filter)
 
-        Timber.Forest.tag(TAG).d("Service Connected")
+        Log.d(TAG, "Service Connected")
     }
 
 
@@ -63,7 +63,7 @@ class PassoverAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_VIEW_LONG_CLICKED -> {
                 updateCurrentAppName(event)
                 if(launchReaderOnLongPress.contains(currentFocusedApp)){
-                    Timber.Forest.tag(TAG).d( "Detected long press on configured app")
+                    Log.d(TAG,  "Detected long press on configured app")
                     launchClipboardActivity()
                 }
             }
@@ -75,7 +75,7 @@ class PassoverAccessibilityService : AccessibilityService() {
                 val labelMatches = event.text.any { it.toString().contains("copy", ignoreCase = true) || it.toString().contains("cut", ignoreCase = true) }
 
                 if (desc.contains("copy", true) || labelMatches) {
-                    Timber.Forest.tag(TAG).d( "Detected copy/cut tap")
+                    Log.d(TAG,  "Detected copy/cut tap")
                     launchClipboardActivity()
                 }
             }
@@ -84,7 +84,7 @@ class PassoverAccessibilityService : AccessibilityService() {
                 // Catch toasts like "Link copied to clipboard"
                 event.text.forEach { t ->
                     if (t.toString().contains("copied", ignoreCase = true)) {
-                        Timber.Forest.tag(TAG).d( "Detected copy related toast")
+                        Log.d(TAG,  "Detected copy related toast")
                         launchClipboardActivity()
                         return
                     }

@@ -10,7 +10,7 @@ import androidx.core.content.FileProvider
 import android.util.Base64
 import com.local.passover.MessageOuterClass
 import dagger.hilt.android.qualifiers.ApplicationContext
-import timber.log.Timber
+import android.util.Log
 import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
@@ -28,7 +28,7 @@ class ClipboardHandler @Inject constructor(@param:ApplicationContext private val
         type: MessageOuterClass.ClipboardMessage.ClipboardContentType,
         deviceName: String? = "Remote",
     ) {
-        Timber.Forest.tag(CHANDLER_TAG).i("Updating clipboard")
+        Log.i(CHANDLER_TAG, "Updating clipboard")
         val clip: ClipData = when (type) {
             MessageOuterClass.ClipboardMessage.ClipboardContentType.TXT ->
                 ClipData.newPlainText("text", data)
@@ -38,7 +38,7 @@ class ClipboardHandler @Inject constructor(@param:ApplicationContext private val
                     val decodedBytes = Base64.decode(data, Base64.DEFAULT)
                     val bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
                     if (bitmap == null) {
-                        Timber.Forest.tag(CHANDLER_TAG).w("Decoded bitmap is null")
+                        Log.w(CHANDLER_TAG, "Decoded bitmap is null")
                         return
                     }
 
@@ -46,16 +46,16 @@ class ClipboardHandler @Inject constructor(@param:ApplicationContext private val
                     if (imageUri != null) {
                         ClipData.newUri(context.contentResolver, "from $deviceName", imageUri)
                     } else {
-                        Timber.Forest.tag(CHANDLER_TAG).w("image uri data null")
+                        Log.w(CHANDLER_TAG, "image uri data null")
                         return
                     }
                 } else {
-                    Timber.Forest.tag(CHANDLER_TAG).w("Invalid base64 image data")
+                    Log.w(CHANDLER_TAG, "Invalid base64 image data")
                     return
                 }
             }
             else -> {
-                Timber.Forest.tag(CHANDLER_TAG).w("Unsupported type: $type")
+                Log.w(CHANDLER_TAG, "Unsupported type: $type")
                 return
             }
         }
@@ -71,7 +71,7 @@ class ClipboardHandler @Inject constructor(@param:ApplicationContext private val
         return try {
             val cacheDir = File(context.cacheDir, remoteClipboardDirName)
             if (!cacheDir.exists() && !cacheDir.mkdirs()) {
-                Timber.Forest.tag(CHANDLER_TAG).w("Failed to create remote clipboard cache dir")
+                Log.w(CHANDLER_TAG, "Failed to create remote clipboard cache dir")
                 return null
             }
 
@@ -79,7 +79,7 @@ class ClipboardHandler @Inject constructor(@param:ApplicationContext private val
                 ?.filter { it.name != latestRemoteImageFileName }
                 ?.forEach { oldFile ->
                     if (!oldFile.delete()) {
-                        Timber.Forest.tag(CHANDLER_TAG).w("Failed to delete stale cached image: ${oldFile.name}")
+                        Log.w(CHANDLER_TAG, "Failed to delete stale cached image: ${oldFile.name}")
                     }
                 }
 
@@ -98,7 +98,7 @@ class ClipboardHandler @Inject constructor(@param:ApplicationContext private val
                 imageFile,
             )
         } catch (e: Exception) {
-            Timber.Forest.tag(CHANDLER_TAG).e(e, "Failed to save remote clipboard image")
+            Log.e(CHANDLER_TAG, "Failed to save remote clipboard image", e)
             null
         }
     }
@@ -109,10 +109,10 @@ class ClipboardHandler @Inject constructor(@param:ApplicationContext private val
             val bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
             bitmap != null
         } catch (e: IllegalArgumentException) {
-            Timber.Forest.tag(CHANDLER_TAG).e(e, "Invalid base64 string")
+            Log.e(CHANDLER_TAG, "Invalid base64 string", e)
             false
         } catch (e: Exception) {
-            Timber.Forest.tag(CHANDLER_TAG).e(e, "Error decoding base64 image")
+            Log.e(CHANDLER_TAG, "Error decoding base64 image", e)
             false
         }
     }

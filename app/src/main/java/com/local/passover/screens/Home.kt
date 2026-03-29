@@ -56,11 +56,6 @@ fun Home(activity: Activity) {
         composable("home") {
             FirstPage(navController = navController, activity)
         }
-        composable("logViewer") {
-            LogViewerScreen(onNavigateUp = {
-                navController.navigateUp()
-            })
-        }
         composable("pairing") {
             PairingScreen(onNavigateUp = {
                 navController.navigateUp()
@@ -149,17 +144,6 @@ fun FirstPage(navController: androidx.navigation.NavController, activity: Activi
                         Text("Pair New Device")
                     }
                 }
-
-                // ── View Logs ──
-                Button(
-                    onClick = {
-                        navController.navigate("logViewer")
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("View Logs")
-                }
-                // TODO: use flag isServiceRunning
 
                 // ── Trusted Devices ──
                 if (trustedPeers.isNotEmpty()) {

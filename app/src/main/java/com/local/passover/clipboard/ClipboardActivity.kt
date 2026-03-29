@@ -8,7 +8,7 @@ import com.local.passover.MessageOuterClass
 import com.local.passover.core.SyncOrchestrator
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
-import timber.log.Timber
+import android.util.Log
 import javax.inject.Inject
 
 // Transparent activity to send clipboard data to the server
@@ -33,7 +33,7 @@ class ClipboardActivity : ComponentActivity() {
             ?.toString()
             ?: ""
 
-        Timber.tag("ClipboardActivity").d("Clipboard text: “$text”")
+        Log.d("ClipboardActivity", "Clipboard text: “$text”")
         lifecycleScope.launch {
             sendClipboardData(text)
         }
@@ -57,7 +57,7 @@ class ClipboardActivity : ComponentActivity() {
                 .build()
             syncOrchestrator.sendMessage(wrapperMessage)
         } catch (e: Exception) {
-            Timber.tag("ClipboardActivity").e(e, "Failed to send clipboard data")
+            Log.e("ClipboardActivity", "Failed to send clipboard data", e)
         }
     }
 }

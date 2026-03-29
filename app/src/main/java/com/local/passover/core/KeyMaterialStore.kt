@@ -2,7 +2,7 @@ package com.local.passover.core
 
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import timber.log.Timber
+import android.util.Log
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.KeyStore
@@ -56,7 +56,7 @@ class KeyMaterialStore @Inject constructor() {
 
         generator.initialize(spec)
         return generator.generateKeyPair().also {
-            Timber.tag(TAG).d("Generated P-256 key agreement pair")
+            Log.d(TAG, "Generated P-256 key agreement pair")
         }
     }
 
@@ -83,7 +83,7 @@ class KeyMaterialStore @Inject constructor() {
         return try {
             keyStore.containsAlias(alias)
         } catch (t: Throwable) {
-            Timber.tag(TAG).e("Failed to check if key exists: $t")
+            Log.e(TAG, "Failed to check if key exists: $t")
             false
         }
     }

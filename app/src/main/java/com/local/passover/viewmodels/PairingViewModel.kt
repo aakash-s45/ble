@@ -9,7 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import timber.log.Timber
+import android.util.Log
 import javax.inject.Inject
 
 sealed interface PairingState {
@@ -45,7 +45,7 @@ class PairingViewModel @Inject constructor(
                     _state.value = PairingState.PeersFound(discovered)
                 }
             } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "Discovery failed")
+                Log.e(TAG, "Discovery failed", e)
                 _state.value = PairingState.Error("Discovery failed: ${e.message}")
             }
         }
@@ -68,7 +68,7 @@ class PairingViewModel @Inject constructor(
                     _state.value = PairingState.Error("Failed to connect to peer")
                 }
             } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "Connection failed")
+                Log.e(TAG, "Connection failed", e)
                 _state.value = PairingState.Error("Connection failed: ${e.message}")
             }
         }
@@ -86,7 +86,7 @@ class PairingViewModel @Inject constructor(
                     _state.value = PairingState.Error("Server did not send GroupKey")
                 }
             } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "SAS confirmation failed")
+                Log.e(TAG, "SAS confirmation failed", e)
                 _state.value = PairingState.Error("Pairing failed: ${e.message}")
             }
         }

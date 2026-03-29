@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import okio.ByteString
-import timber.log.Timber
+import android.util.Log
 import java.util.concurrent.atomic.AtomicReference
 import javax.crypto.SecretKey
 
@@ -63,7 +63,7 @@ class MessageCodec(
     }
 
     private suspend fun decodeIncoming(byteString: ByteString) {
-        Timber.tag(TAG).d("Got message over websocket")
+        Log.d(TAG, "Got message over websocket")
         val key = sessionKeyRef.get()
         try {
             if (key != null) {
@@ -75,11 +75,11 @@ class MessageCodec(
                     val message = MessageOuterClass.Message.parseFrom(byteString.toByteArray())
                     _incomingMessages.emit(message)
                 } catch (e: Exception) {
-                    Timber.tag(TAG).w("No active key and couldn't parse raw message")
+                    Log.w(TAG, "No active key and couldn't parse raw message")
                 }
             }
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Failed to decrypt message")
+            Log.e(TAG, "Failed to decrypt message", e)
         }
     }
 }

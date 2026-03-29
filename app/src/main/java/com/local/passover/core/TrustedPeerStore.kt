@@ -9,7 +9,7 @@ import com.google.gson.Gson
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import timber.log.Timber
+import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -69,7 +69,7 @@ class TrustedPeerStore @Inject constructor(
         return try {
             gson.fromJson(json, PeerListWrapper::class.java).peers.map { it.toPeer() }
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Failed to parse trusted peers")
+            Log.e(TAG, "Failed to parse trusted peers", e)
             emptyList()
         }
     }
@@ -94,7 +94,7 @@ class TrustedPeerStore @Inject constructor(
         current.removeAll { it.deviceId == peer.deviceId }
         current.add(peer)
         writePeers(current)
-        Timber.tag(TAG).d("Added trusted peer: ${peer.deviceName} (${peer.deviceId})")
+        Log.d(TAG, "Added trusted peer: ${peer.deviceName} (${peer.deviceId})")
     }
 
     suspend fun getPeerByDeviceId(deviceId: String): TrustedPeer? {
@@ -107,7 +107,7 @@ class TrustedPeerStore @Inject constructor(
         val current = readPeers().toMutableList()
         current.removeAll { it.deviceId == deviceId }
         writePeers(current)
-        Timber.tag(TAG).d("Removed trusted peer: $deviceId")
+        Log.d(TAG, "Removed trusted peer: $deviceId")
     }
 
     suspend fun isTrusted(deviceId: String): Boolean {

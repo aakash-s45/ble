@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
-import timber.log.Timber
+import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.crypto.SecretKey
 import javax.inject.Inject
@@ -68,14 +68,14 @@ class SyncOrchestrator @Inject constructor(
                 hasTrustedPeers.collect { hasPeers ->
                     if (paused) return@collect
                     if (hasPeers) {
-                        Timber.tag(TAG).d("Trusted peer found, connecting")
+                        Log.d(TAG, "Trusted peer found, connecting")
                         try {
                             ensureConnectedIfNeeded()
                         } catch (e: Exception) {
-                            Timber.tag(TAG).e(e, "Connection attempt failed")
+                            Log.e(TAG, "Connection attempt failed", e)
                         }
                     } else {
-                        Timber.tag(TAG).d("No trusted peers found, waiting for pairing")
+                        Log.d(TAG, "No trusted peers found, waiting for pairing")
                         closeConnection()
                     }
                 }
@@ -85,7 +85,7 @@ class SyncOrchestrator @Inject constructor(
                     if (paused) return@collect
                     when (state) {
                         ConnectionState.FAILED -> {
-                            Timber.tag(TAG).d("Connection failed, scheduling reconnect")
+                            Log.d(TAG, "Connection failed, scheduling reconnect")
                             scheduleReconnection()
                         }
                         ConnectionState.CONNECTED, ConnectionState.IDLE -> {
@@ -115,7 +115,7 @@ class SyncOrchestrator @Inject constructor(
             try {
                 ensureConnectedIfNeeded(forceReconnect = true)
             } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "Resume connection failed")
+                Log.e(TAG, "Resume connection failed", e)
             }
         }
     }
@@ -130,7 +130,7 @@ class SyncOrchestrator @Inject constructor(
 
                 val intentionalDisconnect = disconnectRequested.getAndSet(false)
                 if (!intentionalDisconnect && _connectionState.value == ConnectionState.CONNECTED) {
-                    Timber.tag(TAG).d("WebSocket disconnected unexpectedly, transitioning to FAILED")
+                    Log.d(TAG, "WebSocket disconnected unexpectedly, transitioning to FAILED")
                     clearActiveSession()
                     _connectionState.value = ConnectionState.FAILED
                 }
@@ -143,7 +143,7 @@ class SyncOrchestrator @Inject constructor(
             _connectionState.value == ConnectionState.CONNECTING ||
             _connectionState.value == ConnectionState.DISCOVERING
         ) {
-            Timber.tag(TAG).d("Already connected/connecting. Ignoring request.")
+            Log.d(TAG, "Already connected/connecting. Ignoring request.")
             return true
         }
 
@@ -152,7 +152,7 @@ class SyncOrchestrator @Inject constructor(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "connectWithTrustedPeer failed unexpectedly")
+            Log.e(TAG, "connectWithTrustedPeer failed unexpectedly", e)
             _connectionState.value = ConnectionState.FAILED
             false
         }
@@ -160,14 +160,14 @@ class SyncOrchestrator @Inject constructor(
 
     private suspend fun connectWithTrustedPeerInternal(deviceId: String): Boolean {
         val peer = trustedPeerStore.getPeerByDeviceId(deviceId) ?: run {
-            Timber.tag(TAG).e("No trusted peer found for deviceId: $deviceId")
+            Log.e(TAG, "No trusted peer found for deviceId: $deviceId")
             return false
         }
 
         val groupKey = try {
             deviceIdentityStore.getOrCreateGroupKey()
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Failed to get group key")
+            Log.e(TAG, "Failed to get group key", e)
             _connectionState.value = ConnectionState.FAILED
             return false
         }
@@ -176,7 +176,7 @@ class SyncOrchestrator @Inject constructor(
         val serviceInfo = discoverer.findService(deviceId)
         if (serviceInfo == null) {
             _connectionState.value = ConnectionState.FAILED
-            Timber.tag(TAG).e("Failed to find service for peer: ${peer.deviceName}")
+            Log.e(TAG, "Failed to find service for peer: ${peer.deviceName}")
             return false
         }
 
@@ -191,7 +191,7 @@ class SyncOrchestrator @Inject constructor(
         }
         val hostAddress = inetAddress?.hostAddress?.removePrefix("/")
         if (hostAddress.isNullOrEmpty()) {
-            Timber.tag(TAG).e("No host address for peer: ${peer.deviceName}")
+            Log.e(TAG, "No host address for peer: ${peer.deviceName}")
             _connectionState.value = ConnectionState.FAILED
             return false
         }
@@ -208,25 +208,25 @@ class SyncOrchestrator @Inject constructor(
         if (connected != true) {
             disconnectTransport(intentional = true)
             _connectionState.value = ConnectionState.FAILED
-            Timber.tag(TAG).e("Failed to connect to ${peer.deviceName}")
+            Log.e(TAG, "Failed to connect to ${peer.deviceName}")
             return false
         }
 
         _connectionState.value = ConnectionState.CONNECTED
-        Timber.tag(TAG).d("Connected to trusted peer: ${peer.deviceName}")
+        Log.d(TAG, "Connected to trusted peer: ${peer.deviceName}")
         return true
     }
 
     fun sendMessage(message: MessageOuterClass.Message): Boolean {
         val key = activeGroupKey ?: run {
-            Timber.tag(TAG).w("Cannot send: no active key (not connected)")
+            Log.w(TAG, "Cannot send: no active key (not connected)")
             return false
         }
         return try {
             messageCodec.sendMessage(message, key)
             true
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Failed to encrypt/send message")
+            Log.e(TAG, "Failed to encrypt/send message", e)
             false
         }
     }
@@ -241,14 +241,14 @@ class SyncOrchestrator @Inject constructor(
         if (paused) return
         if (reconnectionJob?.isActive == true) return
         reconnectionJob = scope.launch {
-            Timber.tag(TAG).d("Scheduling reconnect in 5s")
+            Log.d(TAG, "Scheduling reconnect in 5s")
             delay(5000)
             try {
                 if (!paused && trustedPeerStore.getAllPeers().isNotEmpty()) {
                     connectToFirstTrustedPeer()
                 }
             } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "Reconnection attempt failed")
+                Log.e(TAG, "Reconnection attempt failed", e)
             }
         }
     }
@@ -258,7 +258,7 @@ class SyncOrchestrator @Inject constructor(
         if (peer != null) {
             connectWithTrustedPeer(peer.deviceId)
         } else {
-            Timber.tag(TAG).d("No trusted peers available to connect")
+            Log.d(TAG, "No trusted peers available to connect")
         }
     }
 

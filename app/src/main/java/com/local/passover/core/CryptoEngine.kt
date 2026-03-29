@@ -1,6 +1,6 @@
 package com.local.passover.core
 
-import timber.log.Timber
+import android.util.Log
 import java.nio.ByteBuffer
 import java.security.KeyFactory
 import java.security.KeyPair
@@ -120,7 +120,7 @@ class CryptoEngine @Inject constructor() {
             buffer.put(encryptedData)
             return buffer.array()
         } catch (t: Throwable) {
-            Timber.tag(TAG).e("Failed to encrypt data: $t")
+            Log.e(TAG, "Failed to encrypt data: $t")
             throw t
         }
     }
@@ -137,7 +137,7 @@ class CryptoEngine @Inject constructor() {
 
             return cipher.doFinal(cipherText)
         } catch (t: Throwable) {
-            Timber.tag(TAG).e("Failed to decrypt data: $t")
+            Log.e(TAG, "Failed to decrypt data: $t")
             throw t
         }
     }

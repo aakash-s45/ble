@@ -12,7 +12,7 @@ import com.local.passover.core.ClipboardHandler
 import com.local.passover.core.SyncOrchestrator
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
-import timber.log.Timber
+import android.util.Log
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -34,12 +34,12 @@ class MainService : LifecycleService() {
 
         when (intent?.action) {
             ACTION_PAUSE -> {
-                Timber.tag(TAG).d("Received PAUSE action")
+                Log.d(TAG, "Received PAUSE action")
                 syncOrchestrator.pause()
                 updateNotification("Sync paused")
             }
             ACTION_RESUME -> {
-                Timber.tag(TAG).d("Received RESUME action")
+                Log.d(TAG, "Received RESUME action")
                 updateNotification("Keeping device in sync")
                 syncOrchestrator.resume()
             }

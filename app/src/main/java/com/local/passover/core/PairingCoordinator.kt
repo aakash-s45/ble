@@ -9,7 +9,7 @@ import com.local.passover.network.DnsServiceManager
 import com.local.passover.network.WebSocketClient
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
-import timber.log.Timber
+import android.util.Log
 import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 
@@ -67,7 +67,7 @@ class PairingCoordinator @Inject constructor(
         }
 
         if (connected != true) {
-            Timber.tag(TAG).e("WebSocket connection failed to ${peer.serviceName}")
+            Log.e(TAG, "WebSocket connection failed to ${peer.serviceName}")
             reset()
             return null
         }
@@ -92,7 +92,7 @@ class PairingCoordinator @Inject constructor(
         }
 
         if (peerIdentityMsg == null) {
-            Timber.tag(TAG).e("Did not receive peer identity")
+            Log.e(TAG, "Did not receive peer identity")
             reset()
             return null
         }
@@ -130,7 +130,7 @@ class PairingCoordinator @Inject constructor(
             }
 
             if (peerHandshakeMsg == null || peerHandshakeMsg.handshake.encryptedGroupKey.isEmpty) {
-                Timber.tag(TAG).e("Server handshake missing GroupKey or timed out")
+                Log.e(TAG, "Server handshake missing GroupKey or timed out")
                 false
             } else {
                 val groupKeyBytes = crypto.decrypt(
@@ -150,11 +150,11 @@ class PairingCoordinator @Inject constructor(
                     )
                 )
 
-                Timber.tag(TAG).d("Pairing completed with ${identity.deviceName}")
+                Log.d(TAG, "Pairing completed with ${identity.deviceName}")
                 true
             }
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "SAS confirmation failed")
+            Log.e(TAG, "SAS confirmation failed", e)
             false
         } finally {
             reset()
